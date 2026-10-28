@@ -1,0 +1,13 @@
+# CONFIGURAÇÃO DO TEMA CLARO
+[theme.light]
+primaryColor = "#2563EB"         # cor principal de componentes interativos.
+backgroundColor = "#F3F6FC"      # cor de fundo da página.
+secondaryBackgroundColor = "#FFFFFF"
+textColor = "#172033"
+
+# CONFIGURAÇÃO DO TEMA ESCURO
+[theme.dark]
+primaryColor = "#A78BFA"         # cor principal de componentes interativos.
+backgroundColor = "#101827"      # cor de fundo da página.
+secondaryBackgroundColor = "#1C2940"
+textColor = "#F8FAFC"
