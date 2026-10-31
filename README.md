@@ -17,7 +17,6 @@ Por padrão, a aplicação se conecta ao MongoDB local em `mongodb://localhost:2
    git clone https://github.com/Juuh-T/Gerenciador-Financeiro.git
    cd Gerenciador-Financeiro
    ```
-
 2. Crie e ative um ambiente virtual:
 
    **Windows (PowerShell):**
@@ -33,13 +32,11 @@ Por padrão, a aplicação se conecta ao MongoDB local em `mongodb://localhost:2
    python3 -m venv .venv
    source .venv/bin/activate
    ```
-
 3. Instale as dependências:
 
    ```bash
    pip install -r requirements.txt
    ```
-
 4. Se necessário, defina `MONGO_URI` antes de iniciar a aplicação:
 
    **Windows (PowerShell):**
@@ -55,7 +52,6 @@ Por padrão, a aplicação se conecta ao MongoDB local em `mongodb://localhost:2
    ```
 
    A aplicação também carrega variáveis de um arquivo `.env` na pasta do projeto.
-
 5. Inicie o servidor:
 
    ```bash
@@ -70,11 +66,11 @@ Com o servidor em execução, acesse [http://127.0.0.1:8000/docs](http://127.0.0
 
 ## Endpoints
 
-| Método | Caminho | Descrição |
-|---|---|---|
-| `GET` | `/` | Verifica se a API está em execução |
-| `POST` | `/transactions/` | Cadastra uma transação |
-| `GET` | `/transactions/` | Lista as transações cadastradas |
+| Método  | Caminho            | Descrição                           |
+| -------- | ------------------ | ------------------------------------- |
+| `GET`  | `/`              | Verifica se a API está em execução |
+| `POST` | `/transactions/` | Cadastra uma transação              |
+| `GET`  | `/transactions/` | Lista as transações cadastradas     |
 
 Exemplo de corpo para cadastrar uma transação:
 

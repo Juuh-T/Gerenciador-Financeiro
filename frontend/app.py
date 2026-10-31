@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+from api import buscar_transacoes, buscar_resumo_dashboard, criar_transacao
 
 st.set_page_config(page_title="Gerenciador Financeiro", layout="wide")
 if "transacoes" not in st.session_state:
@@ -17,14 +18,17 @@ if pagina == "Dashboard":
     st.subheader("Visão Geral")
     col1, col2, col3, col4 = st.columns(4)
 
+    dados = buscar_resumo_dashboard() # adicionei uma "API para buscar funções para ser usada no front"
+
+    # Incrementei os dados das contas dos usuarios na tabela dashboard
     with col1:
-        st.metric(label="Saldo Atual", value=None, border=True)
+        st.metric(label="Saldo Atual", value=f"R$ {dados['saldo_atual']:.2f}", border=True)
     with col2:
-        st.metric(label="Receita do Mês", value=None, border=True)
+        st.metric(label="Receita do Mês", value=f"R$ {dados['receita_mes']:.2f}", border=True)
     with col3:
-        st.metric(label="Despesas do Mês", value=None, border=True)
+        st.metric(label="Despesas do Mês", value=f"R$ {dados['despesa_mes']:.2f}", border=True)
     with col4:
-        st.metric(label="Economia do Mês", value=None, border=True)
+        st.metric(label="Economia do Mês", value=f"R$ {dados['economia_mes']:.2f}", border=True)
 
 
 elif pagina == "Transações":
@@ -56,7 +60,6 @@ elif pagina == "Transações":
             observacao_opcional = st.text_area("Observação (opcional)")
             botao = st.form_submit_button("Salvar Transação")
 
-
         if botao:
             if not descricao.strip():
                 st.error("Digite uma descrição para a transação")
@@ -66,12 +69,25 @@ elif pagina == "Transações":
                     "valor": valor,
                     "tipo": tipo,
                     "categoria": categoria,
-                    "data": data,
+                    "data": str(data), #está enviando uma string para o banco para não dar erro
                     "observacao": observacao_opcional
                 }
-                st.session_state["transacoes"].append(nova_transacao)
-                st.success("Transação cadastrada com sucesso!")
 
+#----------------------------------------------------------------------------------
+            #chamada da função POST para saçvar transações
+            if criar_transacao(nova_transacao):
+                st.success("Transação salva")
+                st.rerun()
+            else:
+                st.error("Erro ao conectar com o servidor")
+
+        transacao_salva = buscar_transacoes()
+        if transacao_salva:
+            df = pd.DataFrame(transacao_salva)
+            st.dataframe(df, hide_index=True)
+        else:
+            st.info("Nenhuma Transação Cadastrada")
+#----------------------------------------------------------------------------------
         if st.session_state["transacoes"]:
             df = pd.DataFrame(st.session_state["transacoes"])
             df["data"] = pd.to_datetime(df["data"]).dt.strftime("%d/%m/%Y")
