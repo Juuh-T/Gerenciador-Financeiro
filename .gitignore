@@ -15,3 +15,7 @@ __pycache__/
 # Configurações do VS Code ou IDEs
 .vscode/
 .idea/
+
+# Arquivos de configuração do Windows
+desktop.ini
+Thumbs.db
