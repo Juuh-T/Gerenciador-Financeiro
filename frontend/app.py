@@ -82,9 +82,17 @@ elif pagina == "Transações":
                 st.error("Erro ao conectar com o servidor")
 
         transacao_salva = buscar_transacoes()
+        st.write("Dados recebidos da API:", transacao_salva) # <--- Linha temporaria para teste
         if transacao_salva:
             df = pd.DataFrame(transacao_salva)
-            st.dataframe(df, hide_index=True)
+            #st.dataframe(df, hide_index=True)
+            if "_id" in df.columns:
+                df = df.drop(columns=["_id"])
+
+            if "data" in df.columns:
+                df["data"] = pd.to_datetime(df["data"]).dt.strftime("%d/%m/%Y")
+
+            st.dataframe(df, hide_index = True)
         else:
             st.info("Nenhuma Transação Cadastrada")
 #----------------------------------------------------------------------------------

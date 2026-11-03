@@ -17,7 +17,7 @@ def list_transactions():
     return transactions
 
 def get_dashboard_summary():
-    transactions = list(collection.find)
+    transactions = list(collection.find())
 
     saldo_atual = 0.0
     receita_mes = 0.0
@@ -25,18 +25,18 @@ def get_dashboard_summary():
 
     for t in transactions:
         val = float(t.get("valor", 0))
-        if t.get("tipo") == "receita":
+        if t.get("tipo") == "Receita":
             saldo_atual += val
             receita_mes += val
-        elif t.get("tipo") == "receita":
+        elif t.get("tipo") == "Despesa":
             saldo_atual -= val
             receita_mes += val
 
     economia_mes = receita_mes - despesa_mes
 
     return {
-        "salto_atual": saldo_atual,
+        "saldo_atual": saldo_atual,
         "receita_mes": receita_mes,
         "despesa_mes": despesa_mes,
-        "econimia_mes": economia_mes
+        "economia_mes": economia_mes
     }
