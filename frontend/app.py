@@ -72,7 +72,7 @@ elif pagina == "Transações":
                 }
 
 #----------------------------------------------------------------------------------
-                #chamada da função POST para saçvar transações
+                #chamada da função POST para salvar transações
                 if criar_transacao(nova_transacao):
                     st.success("Transação salva")
                     st.rerun()
@@ -80,7 +80,7 @@ elif pagina == "Transações":
                     st.error("Erro ao conectar com o servidor")
 
         transacao_salva = buscar_transacoes()
-        st.write("Dados recebidos da API:", transacao_salva) # <--- Linha temporaria para teste
+        # st.write("Dados recebidos da API:", transacao_salva) # <--- Linha temporaria para teste
         if transacao_salva:
             filtro_tipo = st.selectbox(
                 "Filtrar por tipo", ["Todos", "Receita", "Despesa"]
@@ -89,7 +89,8 @@ elif pagina == "Transações":
             df = pd.DataFrame(transacao_salva)
             if filtro_tipo != "Todos":
                 df = df[df["tipo"] == filtro_tipo]
-            
+            if "_id" in df.columns:
+                df = df.drop(columns=["_id"])
 
             st.dataframe(
                 df,
@@ -106,10 +107,7 @@ elif pagina == "Transações":
                         format="R$ %.2f"
                     )
                 }
-            )
-
-            if "_id" in df.columns:
-                df = df.drop(columns=["_id"])
+            )           
 
             if "data" in df.columns:
                 df["data"] = pd.to_datetime(df["data"]).dt.strftime("%d/%m/%Y")
