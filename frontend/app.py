@@ -3,8 +3,6 @@ import pandas as pd
 from api import buscar_transacoes, buscar_resumo_dashboard, criar_transacao
 
 st.set_page_config(page_title="Gerenciador Financeiro", layout="wide")
-if "transacoes" not in st.session_state:
-    st.session_state["transacoes"] = []
 
 st.title("💰 Gerenciador Financeiro")
 st.write("Controle suas receitas, despesas e metas financeiras em um só lugar")
@@ -74,18 +72,42 @@ elif pagina == "Transações":
                 }
 
 #----------------------------------------------------------------------------------
-            #chamada da função POST para saçvar transações
-            if criar_transacao(nova_transacao):
-                st.success("Transação salva")
-                st.rerun()
-            else:
-                st.error("Erro ao conectar com o servidor")
+                #chamada da função POST para saçvar transações
+                if criar_transacao(nova_transacao):
+                    st.success("Transação salva")
+                    st.rerun()
+                else:
+                    st.error("Erro ao conectar com o servidor")
 
         transacao_salva = buscar_transacoes()
         st.write("Dados recebidos da API:", transacao_salva) # <--- Linha temporaria para teste
         if transacao_salva:
+            filtro_tipo = st.selectbox(
+                "Filtrar por tipo", ["Todos", "Receita", "Despesa"]
+            )
+            
             df = pd.DataFrame(transacao_salva)
-            #st.dataframe(df, hide_index=True)
+            if filtro_tipo != "Todos":
+                df = df[df["tipo"] == filtro_tipo]
+            
+
+            st.dataframe(
+                df,
+                hide_index=True,
+                column_config={
+                    "descricao": "Descrição",
+                    "tipo": "Tipo",
+                    "categoria": "Categoria",
+                    "data": "Data",
+                    "observacao": "Observação",
+                    "valor": st.column_config.NumberColumn(
+                        "Valor (R$)",
+                        alignment="left",
+                        format="R$ %.2f"
+                    )
+                }
+            )
+
             if "_id" in df.columns:
                 df = df.drop(columns=["_id"])
 
@@ -96,21 +118,6 @@ elif pagina == "Transações":
         else:
             st.info("Nenhuma Transação Cadastrada")
 #----------------------------------------------------------------------------------
-        if st.session_state["transacoes"]:
-            df = pd.DataFrame(st.session_state["transacoes"])
-            df["data"] = pd.to_datetime(df["data"]).dt.strftime("%d/%m/%Y")
-
-            st.dataframe(df, hide_index=True, column_config={
-                "descricao": "Descrição",
-                "tipo": "Tipo",
-                "categoria": "Categoria",
-                "observacao": "Observação",
-                "data": "Data",
-                "valor": st.column_config.NumberColumn("Valor (R$)", alignment="left", format="R$ %.2f")
-            })
-        else:
-            st.info("Nenhuma transação cadastrada.")
-
 
 elif pagina == "Orçamentos":
     st.subheader("Controle de Orçamentos")
