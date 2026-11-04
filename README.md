@@ -60,6 +60,13 @@ Por padrão, a aplicação se conecta ao MongoDB local em `mongodb://localhost:2
 
 O servidor ficará disponível em `http://127.0.0.1:8000`.
 
+## Como executar o Front
+
+1. ```bash
+   python -m streamlit run frontend/app.py
+   ```
+
+
 ## Documentação interativa
 
 Com o servidor em execução, acesse [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs) para consultar e testar os endpoints pela interface do Swagger UI.
