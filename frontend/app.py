@@ -28,6 +28,7 @@ if pagina == "Dashboard":
     with col4:
         st.metric(label="Economia do Mês", value=f"R$ {dados['economia_mes']:.2f}", border=True)
 
+# ------------------------------------------------------------------------------------------------------------------------------------ #
 
 elif pagina == "Transações":
     st.subheader("Minhas Transações")
@@ -87,10 +88,24 @@ elif pagina == "Transações":
             )
             
             df = pd.DataFrame(transacao_salva)
+            
             if filtro_tipo != "Todos":
                 df = df[df["tipo"] == filtro_tipo]
             if "_id" in df.columns:
                 df = df.drop(columns=["_id"])
+            if "data" in df.columns:
+                df["data"] = pd.to_datetime(df["data"]).dt.strftime("%d/%m/%Y")
+
+            categorias_filtro = sorted(df["categoria"].dropna().unique())
+                
+            opcoes_categoria = ["Todas"] + list(categorias_filtro)
+
+            filtro_categoria = st.selectbox(
+                "Filtrar por categoria",
+                opcoes_categoria
+            )
+            if filtro_categoria != "Todas":
+                df = df[df["categoria"] == filtro_categoria]
 
             st.dataframe(
                 df,
@@ -109,25 +124,37 @@ elif pagina == "Transações":
                 }
             )           
 
-            if "data" in df.columns:
-                df["data"] = pd.to_datetime(df["data"]).dt.strftime("%d/%m/%Y")
+            
 
-            st.dataframe(df, hide_index = True)
         else:
             st.info("Nenhuma Transação Cadastrada")
-#----------------------------------------------------------------------------------
+
+# ------------------------------------------------------------------------------------------------------------------------------------ #
 
 elif pagina == "Orçamentos":
     st.subheader("Controle de Orçamentos")
 
+    with st.container(border=True):
+        st.write("Novo Orçamento")
+
+        with st.form("form_orcamento", border=False):
+
+            categoria = st.selectbox(
+                "Categoria",["Alimentação", "Transporte", "Saúde", "Educação", "Lazer", "Moradia", "Outros"])
+
+            limite = st.number_input(
+                "Limite mensal (R$)", min_value=0.01, step=0.01, format="%.2f")
+
+            botao_orcamento = st.form_submit_button("Salvar Orçamento")
+
+
+# ------------------------------------------------------------------------------------------------------------------------------------ #
 
 elif pagina == "Metas":
     st.subheader("Minhas Metas")
 
-
 elif pagina == "Relatórios":
     st.subheader("Relatórios Financeiros")
-
 
 elif pagina == "Conversor de Moedas":
     st.subheader("Conversor de Moedas")
