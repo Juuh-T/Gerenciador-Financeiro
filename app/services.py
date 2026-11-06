@@ -30,7 +30,7 @@ def get_dashboard_summary():
             receita_mes += val
         elif t.get("tipo") == "Despesa":
             saldo_atual -= val
-            receita_mes += val
+            despesa_mes += val #<-- arrumado agr
 
     economia_mes = receita_mes - despesa_mes
 
