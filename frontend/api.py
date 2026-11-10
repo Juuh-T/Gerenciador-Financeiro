@@ -6,17 +6,28 @@ API_URL = "http://127.0.0.1:8000"
 
 def buscar_transacoes():
     try:
-        response = requests.get(f"{API_URL}/transactions/")
-        if response.status_code == 200:
-            return response.json()
+        response = requests.get(f"{API_URL}/transactions/", timeout=10)
+        response.raise_for_status()
+        dados = response.json()
+        return dados if isinstance(dados, list) else None
+    except (requests.RequestException, ValueError) as erro:
+        print(f"Erro ao buscar transações: {erro}")
+        return None
 
-        else:
-            print(f"Erro na API: Status {response.status_code}")
-            return []
 
-    except Exception as e:
-        print(f"Erro ao buscar transações: {e}")
-    return []
+# def buscar_transacoes():
+#     try:
+#         response = requests.get(f"{API_URL}/transactions/")
+#         if response.status_code == 200:
+#             return response.json()
+
+#         else:
+#             print(f"Erro na API: Status {response.status_code}")
+#             return []
+
+#     except Exception as e:
+#         print(f"Erro ao buscar transações: {e}")
+#     return []
 
 def buscar_resumo_dashboard():
     try:
