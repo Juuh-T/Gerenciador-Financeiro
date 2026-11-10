@@ -1,13 +1,41 @@
-# CONFIGURAÇÃO DO TEMA CLARO
+
+# CONFIGURAÇÕES GERAIS
+[theme]
+metricValueFontSize = "24px"
+showSidebarBorder = true
+
+# TEMA CLARO
 [theme.light]
-primaryColor = "#2563EB"         # cor principal de componentes interativos.
-backgroundColor = "#F3F6FC"      # cor de fundo da página.
+primaryColor = "#2563EB"
+backgroundColor = "#F7F9FC"
 secondaryBackgroundColor = "#FFFFFF"
 textColor = "#172033"
+borderColor = "#DFE6F1"
+dataframeHeaderBackgroundColor = "#EAF0F8"
+dataframeHeaderTextColor = "#334155"
 
-# CONFIGURAÇÃO DO TEMA ESCURO
+# MENU LATERAL CLARO
+[theme.light.sidebar]
+primaryColor = "#2563EB"
+backgroundColor = "#EDF2F9"
+secondaryBackgroundColor = "#FFFFFF"
+textColor = "#1E293B"
+borderColor = "#DFE6F1"
+
+# TEMA ESCURO
 [theme.dark]
-primaryColor = "#A78BFA"         # cor principal de componentes interativos.
-backgroundColor = "#101827"      # cor de fundo da página.
-secondaryBackgroundColor = "#1C2940"
-textColor = "#F8FAFC"
+primaryColor = "#2563EB"
+backgroundColor = "#0B1220"
+secondaryBackgroundColor = "#172338"
+textColor = "#F1F5F9"
+borderColor = "#2B3B55"
+dataframeHeaderBackgroundColor = "#1A2B43"
+dataframeHeaderTextColor = "#CBD5E1"
+
+# MENU LATERAL ESCURO
+[theme.dark.sidebar]
+primaryColor = "#2563EB"
+backgroundColor = "#111D30"
+secondaryBackgroundColor = "#172338"
+textColor = "#E2E8F0"
+borderColor = "#2B3B55"

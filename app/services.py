@@ -1,13 +1,13 @@
 from app.database import get_database
 from app.models import TransactionSchema, BudgetSchema
 
-#------ conexão banco de dados ------
+# ------ Conexão Banco de Dados ------
 
 db = get_database()
 collection = db["transactions"]
 budgets_collection = db["budgets"]
 
-#------ Lógica Transação ------
+# ------ Lógica Transação ------
 
 def create_transaction(data: TransactionSchema):
     transaction_dict = data.model_dump()
@@ -35,7 +35,7 @@ def get_dashboard_summary():
             receita_mes += val
         elif t.get("tipo") == "Despesa":
             saldo_atual -= val
-            despesa_mes += val #<-- arrumado agr
+            despesa_mes += val
 
     economia_mes = receita_mes - despesa_mes
 
@@ -46,14 +46,14 @@ def get_dashboard_summary():
         "economia_mes": economia_mes
     }
 
-#------ Lógica Orçamento ------
+# ------ Lógica Orçamento ------
 
 def create_or_update_budget(data: BudgetSchema):
     budget_dict = data.model_dump()
     result = budgets_collection.update_one(
         {"categoria": data.categoria},
         {"$set": budget_dict},
-        upsert = True
+        upsert=True
     )
     return budget_dict
 
@@ -65,12 +65,13 @@ def list_budgets_with_progress():
     for t in transactions:
         cat = t.get("categoria")
         val = float(t.get("valor", 0))
-        gastos_por_categoria[cat] = gastos_por_categoria.get(cat, 0.0) + val
+        if cat:
+            gastos_por_categoria[cat] = gastos_por_categoria.get(cat, 0.0) + val
 
     resultado = []
     for b in budgets:
-        cat = t.get("categoria")
-        limite = float(t.get("limite", 0.0))
+        cat = b.get("categoria") # <-- Corrigido: b em vez de t
+        limite = float(b.get("limite", 0.0)) # <-- Corrigido: b em vez de t
         gasto_atual = gastos_por_categoria.get(cat, 0.0)
 
         resultado.append({
@@ -81,4 +82,6 @@ def list_budgets_with_progress():
             "disponivel": max(0.0, limite - gasto_atual),
             "percentual": min(1.0, gasto_atual / limite) if limite > 0 else 0.0
         })
-        return resultado
+
+    # O return DEVE ficar fora do loop for!
+    return resultado
