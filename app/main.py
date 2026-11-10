@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.routes import router as transaction_router
+from app.routes import router
 
 app = FastAPI(title="Gerenciador Financeiro API")
 
@@ -13,7 +13,7 @@ app.add_middleware(
     allow_headers=["*"]
 )
 
-app.include_router(transaction_router)
+app.include_router(router)
 
 @app.get("/")
 def home():

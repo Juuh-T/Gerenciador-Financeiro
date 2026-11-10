@@ -9,3 +9,7 @@ class TransactionSchema(BaseModel):
     categoria: str
     data: str
     observacao: Optional[str] = None
+
+class BudgetSchema(BaseModel):
+    categoria: str
+    limite: float = Field(..., gt=0)

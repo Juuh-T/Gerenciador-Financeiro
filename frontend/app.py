@@ -1,6 +1,12 @@
 import streamlit as st
 import pandas as pd
-from api import buscar_transacoes, buscar_resumo_dashboard, criar_transacao
+from api import (
+    buscar_transacoes, 
+    buscar_resumo_dashboard, 
+    criar_transacao,
+    buscar_orcamentos,
+    criar_orcamento
+)
 
 st.set_page_config(page_title="Gerenciador Financeiro", layout="wide")
 
@@ -146,6 +152,43 @@ elif pagina == "Orçamentos":
                 "Limite mensal (R$)", min_value=0.01, step=0.01, format="%.2f")
 
             botao_orcamento = st.form_submit_button("Salvar Orçamento")
+
+            if botao_orcamento:
+                novo_orcamento = {
+                    "categoria": categoria,
+                    "limite": limite
+                }
+                if criar_orcamento(novo_orcamento):
+                    st.success(f"Orçamento para {categoria} salvo com sucesso!")
+                    st.rerun()
+                else:
+                    st.error("Erro ao salvar orçamento")
+
+    st.write("---")
+    orcamentos = buscar_orcamentos()
+
+    if orcamentos:
+        for item in orcamentos:
+            cat = item["categoria"]
+            lim = item["limite"]
+            gasto = item["gasto_atual"]
+            pct = item["percentual"]
+
+            col_info, col_progresso = st.columns([1, 2])
+
+            with col_info:
+                st.write(f"**{cat}**")
+                st.caption(f"Gasto: R$ {gasto:.2f} / Limite: R$ {lim:.2f}")
+
+            with col_progresso:
+                st.progress(pct)
+                if lim > 0 and gasto > lim:
+                    st.error(f"Atenção: Limite estourado em R$ {gasto - lim:.2f}!")
+                elif pct >= 0.8:
+                    st.warning("Atenção: Você atingiu 80% do limite!")
+            st.divider()
+    else:
+        st.info("Nenhum orçamento configurado.")
 
 
 # ------------------------------------------------------------------------------------------------------------------------------------ #
