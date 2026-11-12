@@ -13,3 +13,10 @@ class TransactionSchema(BaseModel):
 class BudgetSchema(BaseModel):
     categoria: str
     limite: float = Field(..., gt=0)
+
+class MetaSchema(BaseModel):
+    nome: str = Field(..., min_length=1)
+    descricao: Optional[str] = ""
+    valor_alvo: float = Field(..., gt=0)
+    valor_guardado: float = Field(0.0, ge=0)
+    prazo: str

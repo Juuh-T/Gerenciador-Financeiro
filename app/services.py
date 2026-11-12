@@ -1,11 +1,13 @@
 from app.database import get_database
-from app.models import TransactionSchema, BudgetSchema
+from app.models import TransactionSchema, BudgetSchema, MetaSchema
+from bson import ObjectId
 
 # ------ Conexão Banco de Dados ------
 
 db = get_database()
 collection = db["transactions"]
 budgets_collection = db["budgets"]
+metas_collection = db["metas"]
 
 # ------ Lógica Transação ------
 
@@ -70,8 +72,8 @@ def list_budgets_with_progress():
 
     resultado = []
     for b in budgets:
-        cat = b.get("categoria") # <-- Corrigido: b em vez de t
-        limite = float(b.get("limite", 0.0)) # <-- Corrigido: b em vez de t
+        cat = b.get("categoria")
+        limite = float(b.get("limite", 0.0))
         gasto_atual = gastos_por_categoria.get(cat, 0.0)
 
         resultado.append({
@@ -83,5 +85,37 @@ def list_budgets_with_progress():
             "percentual": min(1.0, gasto_atual / limite) if limite > 0 else 0.0
         })
 
-    # O return DEVE ficar fora do loop for!
     return resultado
+
+# ------ Lógica de Metas ------
+
+def create_meta(data: MetaSchema):
+    meta_dict = data.model_dump()
+    result = metas_collection.insert_one(meta_dict)
+    meta_dict["_id"] = str(result.inserted_id)
+    return meta_dict
+
+def list_metas():
+    metas = list(metas_collection.find())
+    for item in metas:
+        item["_id"] = str(item["_id"])
+    return metas
+
+def update_meta_valor(meta_id: str, valor_guardado: float):
+    metas_collection.update_one(
+        {"_id": ObjectId(meta_id)},
+        {"$set": {"valor_guardado": valor_guardado}}
+    )
+    return True
+
+def delete_meta_db(meta_id: str):
+    metas_collection.delete_one({"_id": ObjectId(meta_id)})
+    return True
+
+def update_meta_completa(meta_id: str, data: MetaSchema):
+    meta_dict = data.model_dump()
+    metas_collection.update_one(
+        {"_id": ObjectId(meta_id)},
+        {"$set": meta_dict}
+    )
+    return True

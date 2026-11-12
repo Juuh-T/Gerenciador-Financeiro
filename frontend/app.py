@@ -7,9 +7,12 @@ from api import (
     buscar_resumo_dashboard, 
     criar_transacao,
     buscar_orcamentos,
-    criar_orcamento
+    criar_orcamento,
+    buscar_metas,
+    criar_meta,
+    atualizar_valor_meta,
+    excluir_meta_api
 )
-
 st.set_page_config(page_title="Gerenciador Financeiro", layout="wide")
 
 if "orcamentos" not in st.session_state:
@@ -264,10 +267,11 @@ elif pagina == "Metas":
             salvar_meta = st.form_submit_button("Salvar Meta", use_container_width=True)
 
         if salvar_meta:
+            metas_existentes = buscar_metas()
             nome_limpo = nome_meta.strip() if nome_meta else ""
             nome_repetido = any(
                 m["nome"].strip().casefold() == nome_limpo.casefold()
-                for m in st.session_state["metas"]
+                for m in metas_existentes
             )
 
             if not nome_limpo:
@@ -280,28 +284,32 @@ elif pagina == "Metas":
                 st.warning("Já existe uma meta com esse nome. Use a opção Editar para atualizá-la.")
             else:
                 nova_meta = {
-                    "id": uuid4().hex,
                     "nome": nome_limpo,
                     "descricao": descricao_meta.strip(),
                     "valor_alvo": float(valor_alvo),
                     "valor_guardado": float(valor_guardado),
                     "prazo": prazo_meta.isoformat()
                 }
-                st.session_state["metas"].append(nova_meta)
-                st.success("Meta cadastrada com sucesso!")
+                if criar_meta(nova_meta):
+                    st.session_state["aviso_metas"] = "Meta cadastrada com sucesso!"
+                    st.rerun()
+                else:
+                    st.error("Erro ao conectar com o servidor.")
 
     st.subheader("Minhas Metas Cadastradas")
+    metas_banco = buscar_metas()
 
-    if not st.session_state["metas"]:
+    if not metas_banco:
         st.info("Nenhuma meta cadastrada.")
     else:
         cards = st.columns(2)
 
-        for posicao, meta in enumerate(st.session_state["metas"]):
+        for posicao, meta in enumerate(metas_banco):
+            meta_id = meta["_id"]
             with cards[posicao % 2]:
                 with st.container(border=True):
                     st.write(f"### {meta['nome']}")
-                    if meta["descricao"]:
+                    if meta.get("descricao"):
                         st.caption(meta["descricao"])
 
                     alvo = float(meta["valor_alvo"])
@@ -336,7 +344,7 @@ elif pagina == "Metas":
                     with col_movimentar:
                         with st.popover("Guardar/retirar"):
                             st.write("**Atualizar valor guardado**")
-                            with st.form(f"movimentar_meta_{meta['id']}"):
+                            with st.form(f"movimentar_meta_{meta_id}"):
                                 operacao = st.radio("Operação", ["Adicionar", "Retirar"])
                                 valor_movimento = st.number_input(
                                     "Valor (R$)", min_value=0.01,
@@ -349,17 +357,20 @@ elif pagina == "Metas":
                                     st.error("Não é possível retirar mais do que o valor guardado.")
                                 else:
                                     variacao = valor_movimento if operacao == "Adicionar" else -valor_movimento
-                                    meta["valor_guardado"] = round(guardado + variacao, 2)
-                                    st.session_state["aviso_metas"] = "Valor guardado atualizado!"
-                                    st.rerun()
+                                    novo_saldo = round(guardado + variacao, 2)
+                                    if atualizar_valor_meta(meta_id, novo_saldo):
+                                        st.session_state["aviso_metas"] = "Valor guardado atualizado!"
+                                        st.rerun()
+                                    else:
+                                        st.error("Erro ao atualizar valor.")
 
                     with col_editar:
                         with st.popover("Editar"):
                             st.write("**Editar esta meta**")
-                            with st.form(f"editar_meta_{meta['id']}"):
+                            with st.form(f"editar_meta_{meta_id}"):
                                 nome_editado = st.text_input("Nome", value=meta["nome"])
                                 descricao_editada = st.text_area(
-                                    "Descrição (opcional)", value=meta["descricao"]
+                                    "Descrição (opcional)", value=meta.get("descricao", "")
                                 )
                                 alvo_editado = st.number_input(
                                     "Valor-alvo (R$)", min_value=0.01,
@@ -373,29 +384,37 @@ elif pagina == "Metas":
                             if salvar_edicao:
                                 nome_limpo = nome_editado.strip()
                                 duplicada = any(
-                                    outra["id"] != meta["id"]
+                                    outra["_id"] != meta_id
                                     and outra["nome"].strip().casefold() == nome_limpo.casefold()
-                                    for outra in st.session_state["metas"]
+                                    for outra in metas_banco
                                 )
                                 if not nome_limpo:
                                     st.error("Digite um nome para a meta.")
                                 elif duplicada:
                                     st.error("Já existe outra meta com esse nome.")
                                 else:
-                                    meta["nome"] = nome_limpo
-                                    meta["descricao"] = descricao_editada.strip()
-                                    meta["valor_alvo"] = float(alvo_editado)
-                                    meta["prazo"] = prazo_editado.isoformat()
-                                    st.session_state["aviso_metas"] = "Meta atualizada com sucesso!"
-                                    st.rerun()
+                                    payload_edicao = {
+                                        "nome": nome_limpo,
+                                        "descricao": descricao_editada.strip(),
+                                        "valor_alvo": float(alvo_editado),
+                                        "valor_guardado": guardado,
+                                        "prazo": prazo_editado.isoformat()
+                                    }
+                                    if editar_meta_api(meta_id, payload_edicao):
+                                        st.session_state["aviso_metas"] = "Meta atualizada com sucesso!"
+                                        st.rerun()
+                                    else:
+                                        st.error("Erro ao editar meta.")
 
                     with col_excluir:
                         with st.popover("Excluir"):
                             st.write(f"Deseja realmente excluir a meta **{meta['nome']}**?")
-                            if st.button("Confirmar exclusão", key=f"excluir_meta_{meta['id']}"):
-                                st.session_state["metas"].remove(meta)
-                                st.session_state["aviso_metas"] = "Meta excluída com sucesso."
-                                st.rerun()
+                            if st.button("Confirmar exclusão", key=f"excluir_meta_{meta_id}"):
+                                if excluir_meta_api(meta_id):
+                                    st.session_state["aviso_metas"] = "Meta excluída com sucesso."
+                                    st.rerun()
+                                else:
+                                    st.error("Erro ao excluir meta.")
 
 # ------------------------------------------------------------------------------------------------------------------------------------ #
 
