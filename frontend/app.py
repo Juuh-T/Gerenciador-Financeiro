@@ -1,33 +1,41 @@
 import streamlit as st
 import pandas as pd
 from datetime import date
-from uuid import uuid4
+
 from api import (
-    buscar_transacoes, 
-    buscar_resumo_dashboard, 
+    buscar_transacoes,
+    buscar_resumo_dashboard,
     criar_transacao,
     buscar_orcamentos,
     criar_orcamento,
     buscar_metas,
     criar_meta,
     atualizar_valor_meta,
+    editar_meta_api,
     excluir_meta_api
 )
+from auth import acesso_autenticado
+
 st.set_page_config(page_title="Gerenciador Financeiro", layout="wide")
+
+# ========================================================================================
+# Modo de desenvolvimento (usar False antes de publicar)
+MODO_DESENVOLVIMENTO = False
+
+if not MODO_DESENVOLVIMENTO:
+    if not acesso_autenticado():
+        st.stop()
+# ========================================================================================
 
 if "orcamentos" not in st.session_state:
     st.session_state["orcamentos"] = []
-if "metas" not in st.session_state:
-    st.session_state["metas"] = []
-
 if "pagina_atual" not in st.session_state:
-    st.session_state["pagina_atual"] = "Dashboard" 
+    st.session_state["pagina_atual"] = "Dashboard"
 
 st.title("💰 Gerenciador Financeiro")
 st.write("Controle suas receitas, despesas e metas financeiras em um só lugar")
 
-# ------------------------------------------------------------------------------------------------------------------------------------ #
-# MENU LATERAL
+# ----------------------------------------------------------------------------------------
 
 st.sidebar.title("Finanças")
 st.sidebar.caption("GERENCIADOR FINANCEIRO")
@@ -53,29 +61,25 @@ for nome, icone in paginas.items():
     )
 pagina = st.session_state["pagina_atual"]
 
-# ------------------------------------------------------------------------------------------------------------------------------------ #
-# DASHBOARD
+# -------------------------------------------- Dashboard ----------------------------------------------
 
 if pagina == "Dashboard":
     st.subheader("Visão Geral")
     dados = buscar_resumo_dashboard()
 
-    # Primeira linha
     col1, col2 = st.columns(2, gap="small")
     with col1:
         st.metric(label="Saldo Atual", value=f"R$ {dados['saldo_atual']:.2f}", border=True)
     with col2:
         st.metric(label="Receita do Mês", value=f"R$ {dados['receita_mes']:.2f}", border=True)
 
-    # Segunda linha
     col3, col4 = st.columns(2, gap="small")
     with col3:
         st.metric(label="Despesas do Mês", value=f"R$ {dados['despesa_mes']:.2f}", border=True)
     with col4:
         st.metric(label="Economia do Mês", value=f"R$ {dados['economia_mes']:.2f}", border=True)
 
-# ------------------------------------------------------------------------------------------------------------------------------------ #
-# TRANSAÇÕES
+# -------------------------------------------- Transações ----------------------------------------------
 
 elif pagina == "Transações":
     st.subheader("Minhas Transações")
@@ -86,7 +90,6 @@ elif pagina == "Transações":
 
         categorias_receita = ["Salário", "Freelance", "Investimentos", "Presente", "Outros"]
         categorias_despesa = ["Alimentação", "Transporte", "Saúde", "Educação", "Lazer", "Moradia", "Outros"]
-        
         categorias_disponiveis = categorias_receita if tipo == "Receita" else categorias_despesa
 
         with st.form("form_transacao", border=False):
@@ -98,138 +101,279 @@ elif pagina == "Transações":
             with col2:
                 categoria = st.selectbox("Categoria", categorias_disponiveis)
             with col3:
-                data_transacao = st.date_input("Data")
+                data = st.date_input("Data")
 
             observacao_opcional = st.text_area("Observação (opcional)")
             botao = st.form_submit_button("Salvar Transação")
 
-            if botao:
-                if not descricao.strip():
-                    st.error("Digite uma descrição para a transação")
+        if botao:
+            if not descricao.strip():
+                st.error("Digite uma descrição para a transação")
+            else:
+                nova_transacao = {
+                    "descricao": descricao.strip(),
+                    "valor": valor,
+                    "tipo": tipo,
+                    "categoria": categoria,
+                    "data": str(data),
+                    "observacao": observacao_opcional
+                }
+                if criar_transacao(nova_transacao):
+                    st.success("Transação salva")
+                    st.rerun()
                 else:
-                    nova_transacao = {
-                        "descricao": descricao.strip(),
-                        "valor": valor,
-                        "tipo": tipo,
-                        "categoria": categoria,
-                        "data": str(data_transacao),
-                        "observacao": observacao_opcional
-                    }
-                    if criar_transacao(nova_transacao):
-                        st.success("Transação salva")
-                        st.rerun()
-                    else:
-                        st.error("Erro ao conectar com o servidor")
+                    st.error("Erro ao conectar com o servidor")
 
-    st.write("---")
-    transacao_salva = buscar_transacoes()
-    
-    if transacao_salva:
-        df = pd.DataFrame(transacao_salva)
-        
-        col_filtro1, col_filtro2 = st.columns(2)
-        with col_filtro1:
+        transacao_salva = buscar_transacoes()
+        if transacao_salva:
             filtro_tipo = st.selectbox("Filtrar por tipo", ["Todos", "Receita", "Despesa"])
-        
-        if filtro_tipo != "Todos":
-            df = df[df["tipo"] == filtro_tipo]
+            df = pd.DataFrame(transacao_salva)
+            
+            if filtro_tipo != "Todos":
+                df = df[df["tipo"] == filtro_tipo]
+            if "_id" in df.columns:
+                df = df.drop(columns=["_id"])
+            if "data" in df.columns:
+                df["data"] = pd.to_datetime(df["data"], errors="coerce").dt.strftime("%d/%m/%Y")
 
-        categorias_filtro = sorted(df["categoria"].dropna().unique())
-        opcoes_categoria = ["Todas"] + list(categorias_filtro)
+            categorias_filtro = sorted(df["categoria"].dropna().unique())
+            opcoes_categoria = ["Todas"] + list(categorias_filtro)
 
-        with col_filtro2:
             filtro_categoria = st.selectbox("Filtrar por categoria", opcoes_categoria)
-        
-        if filtro_categoria != "Todas":
-            df = df[df["categoria"] == filtro_categoria]
+            if filtro_categoria != "Todas":
+                df = df[df["categoria"] == filtro_categoria]
 
-        if "_id" in df.columns:
-            df = df.drop(columns=["_id"])
-        if "data" in df.columns:
-            df["data"] = pd.to_datetime(df["data"]).dt.strftime("%d/%m/%Y")
+            st.dataframe(
+                df,
+                hide_index=True,
+                column_config={
+                    "descricao": "Descrição",
+                    "tipo": "Tipo",
+                    "categoria": "Categoria",
+                    "data": "Data",
+                    "observacao": "Observação",
+                    "valor": st.column_config.NumberColumn(
+                        "Valor (R$)", alignment="left", format="R$ %.2f"
+                    )
+                }
+            )
+        else:
+            st.info("Nenhuma Transação Cadastrada")
 
-        st.dataframe(
-            df,
-            hide_index=True,
-            column_config={
-                "descricao": "Descrição",
-                "tipo": "Tipo",
-                "categoria": "Categoria",
-                "data": "Data",
-                "observacao": "Observação",
-                "valor": st.column_config.NumberColumn("Valor (R$)", alignment="left", format="R$ %.2f")
-            }
-        )
-    else:
-        st.info("Nenhuma Transação Cadastrada")
-
-# ------------------------------------------------------------------------------------------------------------------------------------ #
-# ORÇAMENTOS (INTEGRADO À API FASTAPI / MONGODB)
+# -------------------------------------------- Orçamentos ----------------------------------------------
 
 elif pagina == "Orçamentos":
     st.subheader("Controle de Orçamentos")
-    st.write("Defina seus limites mensais e acompanhe os gastos por categoria em tempo real.")
+    st.write("Defina seus limites financeiros e acompanhe o consumo por categoria.")
 
-    with st.container(border=True):
-        st.write("**Novo Orçamento**")
+    def formatar_reais(numero):
+        return "R$ " + f"{numero:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
-        with st.form("form_orcamento", border=False):
-            categoria_orc = st.selectbox(
-                "Categoria", 
-                ["Alimentação", "Transporte", "Saúde", "Educação", "Lazer", "Moradia", "Outros"]
-            )
-            limite = st.number_input(
-                "Limite mensal (R$)", min_value=0.01, step=0.01, format="%.2f"
-            )
+    tab_banco, tab_mensal = st.tabs([
+        "Orçamentos salvos no banco",
+        "Orçamentos mensais (temporários)",
+    ])
 
-            botao_orcamento = st.form_submit_button("Salvar Orçamento")
+    with tab_banco:
+        st.caption("Estes orçamentos usam a API FastAPI/MongoDB. O modelo atual recebe categoria e limite, sem mês/ano.")
 
-            if botao_orcamento:
-                novo_orcamento = {
-                    "categoria": categoria_orc,
-                    "limite": limite
-                }
-                if criar_orcamento(novo_orcamento):
-                    st.success(f"Orçamento para {categoria_orc} salvo com sucesso!")
+        with st.container(border=True):
+            st.write("**Novo Orçamento no Banco**")
+            with st.form("form_orcamento_api", border=False):
+                categoria_api = st.selectbox(
+                    "Categoria", ["Alimentação", "Transporte", "Saúde", "Educação", "Lazer", "Moradia", "Outros"],
+                    key="categoria_orc_api"
+                )
+                limite_api = st.number_input(
+                    "Limite (R$)", min_value=0.01, step=0.01,
+                    format="%.2f", key="limite_orc_api"
+                )
+                salvar_api = st.form_submit_button("Salvar no Banco")
+
+            if salvar_api:
+                novo_orcamento_api = {"categoria": categoria_api, "limite": float(limite_api)}
+                if criar_orcamento(novo_orcamento_api):
+                    st.success(f"Orçamento para {categoria_api} salvo com sucesso!")
                     st.rerun()
                 else:
-                    st.error("Erro ao salvar orçamento no servidor.")
+                    st.error("Não foi possível salvar o orçamento no servidor.")
 
-    st.write("---")
-    st.subheader("Meus Orçamentos")
-    orcamentos = buscar_orcamentos()
+        with st.container(border=True):
+            st.write("**Orçamentos Cadastrados no Banco**")
+            orcamentos_api = buscar_orcamentos()
 
-    if orcamentos:
-        cards = st.columns(2)
-        for posicao, item in enumerate(orcamentos):
-            cat = item.get("categoria", "Sem Categoria")
-            lim = float(item.get("limite", 0.0))
-            gasto = float(item.get("gasto_atual", 0.0))
-            pct = float(item.get("percentual", 0.0))
+            if orcamentos_api:
+                cards_api = st.columns(2)
+                for posicao, item in enumerate(orcamentos_api):
+                    categoria_item = item.get("categoria", "Sem categoria")
+                    limite_item = float(item.get("limite") or 0.0)
+                    gasto_item = float(item.get("gasto_atual") or 0.0)
+                    percentual_item = float(item.get("percentual") or 0.0)
+                    progresso = max(0.0, min(percentual_item, 1.0))
 
-            with cards[posicao % 2]:
-                with st.container(border=True):
-                    st.markdown(f"**{cat}**")
-                    col_met1, col_met2 = st.columns(2)
-                    with col_met1:
-                        st.metric("Limite definido", f"R$ {lim:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."))
-                    with col_met2:
-                        st.metric("Total gasto", f"R$ {gasto:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."))
+                    with cards_api[posicao % 2]:
+                        with st.container(border=True):
+                            st.markdown(f"**{categoria_item}**")
+                            col_limite, col_gasto = st.columns(2)
+                            with col_limite:
+                                st.metric("Limite definido", formatar_reais(limite_item))
+                            with col_gasto:
+                                st.metric("Total gasto", formatar_reais(gasto_item))
 
-                    st.progress(pct)
-                    st.caption(f"{pct * 100:.1f}% do limite utilizado")
+                            st.progress(progresso)
+                            st.caption(f"{percentual_item * 100:.1f}% do limite utilizado")
+                            if limite_item > 0 and gasto_item > limite_item:
+                                st.error(f"Limite ultrapassado em {formatar_reais(gasto_item - limite_item)}!")
+                            elif percentual_item >= 0.8:
+                                st.warning("Atenção: você está perto do limite (80% ou mais).")
+                            else:
+                                st.success("Gastos dentro do limite.")
+            else:
+                st.info("Nenhum orçamento encontrado no banco ou a API está indisponível.")
 
-                    if lim > 0 and gasto > lim:
-                        st.error(f"Atenção: Limite ultrapassado em R$ {gasto - lim:,.2f}!")
-                    elif pct >= 0.8:
-                        st.warning("Atenção: Você está perto do limite (>= 80%).")
+    with tab_mensal:
+        st.caption("Esta seção mantém orçamentos mensais por mês/ano na sessão atual.")
+        meses = [
+            "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
+            "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"
+        ]
+        categorias_orcamento = [
+            "Geral (todas as categorias)", "Alimentação", "Transporte",
+            "Saúde", "Educação", "Lazer", "Moradia", "Outros"
+        ]
+        hoje = date.today()
+
+        with st.container(border=True):
+            st.write("**Novo Orçamento**")
+
+            with st.form("form_orcamento", border=False):
+                categoria_orc = st.selectbox("Categoria", categorias_orcamento)
+                limite = st.number_input(
+                    "Limite mensal (R$)", min_value=0.01, step=0.01, format="%.2f"
+                )
+                col_mes, col_ano = st.columns(2)
+                with col_mes:
+                    mes = st.selectbox("Mês", meses, index=hoje.month - 1)
+                with col_ano:
+                    ano = st.number_input(
+                        "Ano", min_value=2000, max_value=2100,
+                        value=hoje.year, step=1
+                    )
+                botao_orcamento = st.form_submit_button("Salvar Orçamento")
+
+            if botao_orcamento:
+                existente = None
+                for orcamento in st.session_state["orcamentos"]:
+                    if (orcamento["categoria"] == categoria_orc
+                            and orcamento["mes"] == mes
+                            and int(orcamento["ano"]) == int(ano)):
+                        existente = orcamento
+                        break
+
+                if existente is not None:
+                    existente["limite"] = float(limite)
+                    st.success("Orçamento atualizado com sucesso!")
+                else:
+                    novo_orcamento = {
+                        "categoria": categoria_orc,
+                        "limite": float(limite),
+                        "mes": mes,
+                        "ano": int(ano)
+                    }
+                    st.session_state["orcamentos"].append(novo_orcamento)
+                    st.success("Orçamento cadastrado com sucesso!")
+
+                st.session_state["mes_visual_orc"] = mes
+                st.session_state["ano_visual_orc"] = int(ano)
+
+        with st.container(border=True):
+            st.write("**Meus Orçamentos**")
+            col_mes_filtro, col_ano_filtro = st.columns(2)
+            with col_mes_filtro:
+                mes_visual = st.selectbox(
+                    "Mês de visualização", meses,
+                    index=hoje.month - 1, key="mes_visual_orc"
+                )
+            with col_ano_filtro:
+                ano_visual = st.number_input(
+                    "Ano de visualização", min_value=2000, max_value=2100,
+                    value=hoje.year, step=1, key="ano_visual_orc"
+                )
+
+            orcamentos_visiveis = [
+                orc for orc in st.session_state["orcamentos"]
+                if orc["mes"] == mes_visual and int(orc["ano"]) == int(ano_visual)
+            ]
+
+            if not orcamentos_visiveis:
+                st.info("Nenhum orçamento cadastrado para esse mês e ano.")
+            else:
+                transacoes_api = buscar_transacoes()
+                gastos_por_categoria = None
+                gasto_total = None
+
+                if transacoes_api is None:
+                    st.warning("Não foi possível consultar as transações. Os gastos não serão calculados.")
+                elif not transacoes_api:
+                    gastos_por_categoria = {}
+                    gasto_total = 0.0
+                else:
+                    df_gastos = pd.DataFrame(transacoes_api)
+                    colunas = {"tipo", "categoria", "valor", "data"}
+                    if not colunas.issubset(df_gastos.columns):
+                        st.warning("A API retornou transações sem os campos necessários para os cálculos.")
                     else:
-                        st.success("Gastos dentro do limite.")
-    else:
-        st.info("Nenhum orçamento configurado.")
+                        df_gastos["data"] = pd.to_datetime(df_gastos["data"], errors="coerce")
+                        df_gastos["valor"] = pd.to_numeric(df_gastos["valor"], errors="coerce").fillna(0)
+                        df_gastos["tipo"] = df_gastos["tipo"].astype(str).str.strip().str.casefold()
+                        df_gastos = df_gastos[
+                            (df_gastos["tipo"] == "despesa")
+                            & (df_gastos["data"].dt.month == meses.index(mes_visual) + 1)
+                            & (df_gastos["data"].dt.year == int(ano_visual))
+                        ]
+                        gastos_por_categoria = df_gastos.groupby("categoria")["valor"].sum().to_dict()
+                        gasto_total = float(df_gastos["valor"].sum())
 
-# ------------------------------------------------------------------------------------------------------------------------------------ #
-# METAS
+                cards = st.columns(2)
+                for posicao, orcamento in enumerate(orcamentos_visiveis):
+                    with cards[posicao % 2]:
+                        with st.container(border=True):
+                            categoria_atual = orcamento["categoria"]
+                            limite_atual = float(orcamento["limite"])
+                            st.markdown(f"**{categoria_atual}**")
+                            st.caption(f"{mes_visual} de {int(ano_visual)}")
+                            st.metric("Limite definido", formatar_reais(limite_atual))
+
+                            if gastos_por_categoria is None:
+                                st.info("Gastos indisponíveis no momento.")
+                            else:
+                                if categoria_atual == "Geral (todas as categorias)":
+                                    gasto = gasto_total
+                                else:
+                                    gasto = float(gastos_por_categoria.get(categoria_atual, 0.0))
+
+                                percentual = (gasto / limite_atual) * 100
+                                st.metric("Total gasto", formatar_reais(gasto))
+                                st.progress(min(percentual / 100, 1.0))
+                                st.caption(f"{percentual:.1f}% do limite utilizado")
+
+                                if percentual > 100:
+                                    st.error("Limite ultrapassado!")
+                                elif percentual >= 80:
+                                    st.warning("Atenção: você está perto do limite.")
+                                else:
+                                    st.success("Gastos dentro do limite.")
+
+                            with st.popover("Excluir orçamento"):
+                                st.write("Deseja realmente excluir este orçamento?")
+                                if st.button(
+                                    "Confirmar exclusão",
+                                    key=f"excluir_{categoria_atual}_{mes_visual}_{ano_visual}"
+                                ):
+                                    st.session_state["orcamentos"].remove(orcamento)
+                                    st.rerun()
+
+# ----------------------------------------------- Metas -------------------------------------------------
 
 elif pagina == "Metas":
     st.subheader("Minhas Metas")
@@ -296,130 +440,133 @@ elif pagina == "Metas":
                 else:
                     st.error("Erro ao conectar com o servidor.")
 
-    st.subheader("Minhas Metas Cadastradas")
-    metas_banco = buscar_metas()
+    with st.container(border=True):
+        st.write("**Minhas Metas Cadastradas**")
+        metas_banco = buscar_metas()
 
-    if not metas_banco:
-        st.info("Nenhuma meta cadastrada.")
-    else:
-        cards = st.columns(2)
+        if not metas_banco:
+            st.info("Nenhuma meta cadastrada.")
+        else:
+            cards = st.columns(2)
 
-        for posicao, meta in enumerate(metas_banco):
-            meta_id = meta["_id"]
-            with cards[posicao % 2]:
-                with st.container(border=True):
-                    st.write(f"### {meta['nome']}")
-                    if meta.get("descricao"):
-                        st.caption(meta["descricao"])
+            for posicao, meta in enumerate(metas_banco):
+                meta_id = meta["_id"]
+                with cards[posicao % 2]:
+                    with st.container(border=True):
+                        st.write(f"### {meta['nome']}")
+                        if meta.get("descricao"):
+                            st.caption(meta["descricao"])
 
-                    alvo = float(meta["valor_alvo"])
-                    guardado = float(meta["valor_guardado"])
-                    restante = max(alvo - guardado, 0.0)
-                    percentual = (guardado / alvo) * 100
-                    prazo = date.fromisoformat(meta["prazo"])
-                    dias_restantes = (prazo - date.today()).days
+                        alvo = float(meta["valor_alvo"])
+                        guardado = float(meta["valor_guardado"])
+                        restante = max(alvo - guardado, 0.0)
+                        percentual = (guardado / alvo) * 100
+                        prazo = date.fromisoformat(meta["prazo"])
+                        dias_restantes = (prazo - date.today()).days
 
-                    st.caption(f"Valor-alvo: {formatar_reais_meta(alvo)}")
-                    col_guardado_card, col_restante_card = st.columns(2)
-                    with col_guardado_card:
-                        st.metric("Valor guardado", formatar_reais_meta(guardado))
-                    with col_restante_card:
-                        st.metric("Falta guardar", formatar_reais_meta(restante))
+                        st.caption(f"Valor-alvo: {formatar_reais_meta(alvo)}")
+                        col_guardado_card, col_restante_card = st.columns(2)
+                        with col_guardado_card:
+                            st.metric("Valor guardado", formatar_reais_meta(guardado))
+                        with col_restante_card:
+                            st.metric("Falta guardar", formatar_reais_meta(restante))
 
-                    st.progress(min(max(percentual / 100, 0.0), 1.0))
-                    st.caption(f"{percentual:.1f}% da meta alcançada")
-                    st.caption(f"Prazo: {prazo.strftime('%d/%m/%Y')}")
+                        st.progress(min(max(percentual / 100, 0.0), 1.0))
+                        st.caption(f"{percentual:.1f}% da meta alcançada")
+                        st.caption(f"Prazo: {prazo.strftime('%d/%m/%Y')}")
 
-                    if percentual >= 100:
-                        st.success("Meta alcançada! Parabéns!")
-                    elif dias_restantes < 0:
-                        st.warning("O prazo terminou e a meta ainda não foi alcançada.")
-                    elif dias_restantes == 0:
-                        st.warning("O prazo termina hoje.")
-                    else:
-                        st.info(f"Faltam {dias_restantes} dia(s) para o prazo.")
+                        if percentual >= 100:
+                            st.success("Meta alcançada! Parabéns!")
+                        elif dias_restantes < 0:
+                            st.warning("O prazo terminou e a meta ainda não foi alcançada.")
+                        elif dias_restantes == 0:
+                            st.warning("O prazo termina hoje.")
+                        else:
+                            st.info(f"Faltam {dias_restantes} dia(s) para o prazo.")
 
-                    col_movimentar, col_editar, col_excluir = st.columns(3)
+                        col_movimentar, col_editar, col_excluir = st.columns(3)
 
-                    with col_movimentar:
-                        with st.popover("Guardar/retirar"):
-                            st.write("**Atualizar valor guardado**")
-                            with st.form(f"movimentar_meta_{meta_id}"):
-                                operacao = st.radio("Operação", ["Adicionar", "Retirar"])
-                                valor_movimento = st.number_input(
-                                    "Valor (R$)", min_value=0.01,
-                                    step=0.01, format="%.2f"
-                                )
-                                confirmar_movimento = st.form_submit_button("Confirmar")
+                        with col_movimentar:
+                            with st.popover("Guardar/retirar"):
+                                st.write("**Atualizar valor guardado**")
+                                with st.form(f"movimentar_meta_{meta_id}"):
+                                    operacao = st.radio("Operação", ["Adicionar", "Retirar"])
+                                    valor_movimento = st.number_input(
+                                        "Valor (R$)", min_value=0.01,
+                                        step=0.01, format="%.2f"
+                                    )
+                                    confirmar_movimento = st.form_submit_button("Confirmar")
 
-                            if confirmar_movimento:
-                                if operacao == "Retirar" and valor_movimento > guardado:
-                                    st.error("Não é possível retirar mais do que o valor guardado.")
-                                else:
-                                    variacao = valor_movimento if operacao == "Adicionar" else -valor_movimento
-                                    novo_saldo = round(guardado + variacao, 2)
-                                    if atualizar_valor_meta(meta_id, novo_saldo):
-                                        st.session_state["aviso_metas"] = "Valor guardado atualizado!"
+                                if confirmar_movimento:
+                                    if operacao == "Retirar" and valor_movimento > guardado:
+                                        st.error("Não é possível retirar mais do que o valor guardado.")
+                                    else:
+                                        variacao = valor_movimento if operacao == "Adicionar" else -valor_movimento
+                                        novo_saldo = round(guardado + variacao, 2)
+                                        if atualizar_valor_meta(meta_id, novo_saldo):
+                                            st.session_state["aviso_metas"] = "Valor guardado atualizado!"
+                                            st.rerun()
+                                        else:
+                                            st.error("Erro ao atualizar valor.")
+
+                        with col_editar:
+                            with st.popover("Editar"):
+                                st.write("**Editar esta meta**")
+                                with st.form(f"editar_meta_{meta_id}"):
+                                    nome_editado = st.text_input("Nome", value=meta["nome"])
+                                    descricao_editada = st.text_area(
+                                        "Descrição (opcional)", value=meta.get("descricao", "")
+                                    )
+                                    alvo_editado = st.number_input(
+                                        "Valor-alvo (R$)", min_value=0.01,
+                                        value=alvo, step=0.01, format="%.2f"
+                                    )
+                                    prazo_editado = st.date_input(
+                                        "Prazo", value=prazo, format="DD/MM/YYYY"
+                                    )
+                                    salvar_edicao = st.form_submit_button("Salvar alterações")
+
+                                if salvar_edicao:
+                                    nome_limpo = nome_editado.strip()
+                                    duplicada = any(
+                                        outra["_id"] != meta_id
+                                        and outra["nome"].strip().casefold() == nome_limpo.casefold()
+                                        for outra in metas_banco
+                                    )
+                                    if not nome_limpo:
+                                        st.error("Digite um nome para a meta.")
+                                    elif duplicada:
+                                        st.error("Já existe outra meta com esse nome.")
+                                    else:
+                                        payload_edicao = {
+                                            "nome": nome_limpo,
+                                            "descricao": descricao_editada.strip(),
+                                            "valor_alvo": float(alvo_editado),
+                                            "valor_guardado": guardado,
+                                            "prazo": prazo_editado.isoformat()
+                                        }
+                                        if editar_meta_api(meta_id, payload_edicao):
+                                            st.session_state["aviso_metas"] = "Meta atualizada com sucesso!"
+                                            st.rerun()
+                                        else:
+                                            st.error("Erro ao editar meta.")
+
+                        with col_excluir:
+                            with st.popover("Excluir"):
+                                st.write(f"Deseja realmente excluir a meta **{meta['nome']}**?")
+                                if st.button("Confirmar exclusão", key=f"excluir_meta_{meta_id}"):
+                                    if excluir_meta_api(meta_id):
+                                        st.session_state["aviso_metas"] = "Meta excluída com sucesso."
                                         st.rerun()
                                     else:
-                                        st.error("Erro ao atualizar valor.")
+                                        st.error("Erro ao excluir meta.")
 
-                    with col_editar:
-                        with st.popover("Editar"):
-                            st.write("**Editar esta meta**")
-                            with st.form(f"editar_meta_{meta_id}"):
-                                nome_editado = st.text_input("Nome", value=meta["nome"])
-                                descricao_editada = st.text_area(
-                                    "Descrição (opcional)", value=meta.get("descricao", "")
-                                )
-                                alvo_editado = st.number_input(
-                                    "Valor-alvo (R$)", min_value=0.01,
-                                    value=alvo, step=0.01, format="%.2f"
-                                )
-                                prazo_editado = st.date_input(
-                                    "Prazo", value=prazo, format="DD/MM/YYYY"
-                                )
-                                salvar_edicao = st.form_submit_button("Salvar alterações")
-
-                            if salvar_edicao:
-                                nome_limpo = nome_editado.strip()
-                                duplicada = any(
-                                    outra["_id"] != meta_id
-                                    and outra["nome"].strip().casefold() == nome_limpo.casefold()
-                                    for outra in metas_banco
-                                )
-                                if not nome_limpo:
-                                    st.error("Digite um nome para a meta.")
-                                elif duplicada:
-                                    st.error("Já existe outra meta com esse nome.")
-                                else:
-                                    payload_edicao = {
-                                        "nome": nome_limpo,
-                                        "descricao": descricao_editada.strip(),
-                                        "valor_alvo": float(alvo_editado),
-                                        "valor_guardado": guardado,
-                                        "prazo": prazo_editado.isoformat()
-                                    }
-                                    if editar_meta_api(meta_id, payload_edicao):
-                                        st.session_state["aviso_metas"] = "Meta atualizada com sucesso!"
-                                        st.rerun()
-                                    else:
-                                        st.error("Erro ao editar meta.")
-
-                    with col_excluir:
-                        with st.popover("Excluir"):
-                            st.write(f"Deseja realmente excluir a meta **{meta['nome']}**?")
-                            if st.button("Confirmar exclusão", key=f"excluir_meta_{meta_id}"):
-                                if excluir_meta_api(meta_id):
-                                    st.session_state["aviso_metas"] = "Meta excluída com sucesso."
-                                    st.rerun()
-                                else:
-                                    st.error("Erro ao excluir meta.")
-
-# ------------------------------------------------------------------------------------------------------------------------------------ #
+# --------------------------------------------- Relatórios ----------------------------------------------
 
 elif pagina == "Relatórios":
     st.subheader("Relatórios Financeiros")
+
+# ----------------------------------------- Conversor de Moedas ------------------------------------------
 
 elif pagina == "Conversor de Moedas":
     st.subheader("Conversor de Moedas")
