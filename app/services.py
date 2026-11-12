@@ -1,6 +1,15 @@
+import hashlib
+import secrets
+from fastapi import HTTPException
 from app.database import get_database
-from app.models import TransactionSchema, BudgetSchema, MetaSchema
 from bson import ObjectId
+from app.models import (
+    TransactionSchema,
+    BudgetSchema,
+    MetaSchema,
+    UserRegisterSchema,
+    UserLoginSchema
+    )
 
 # ------ Conexão Banco de Dados ------
 
@@ -8,6 +17,7 @@ db = get_database()
 collection = db["transactions"]
 budgets_collection = db["budgets"]
 metas_collection = db["metas"]
+user_collection = db["users"]
 
 # ------ Lógica Transação ------
 
@@ -119,3 +129,46 @@ def update_meta_completa(meta_id: str, data: MetaSchema):
         {"$set": meta_dict}
     )
     return True
+
+# ------ Lógica de Autenticação ------
+
+def _gerar_hash_senha(senha: str, salt: str = None) -> str:
+    if not salt:
+        salt = secrets.token_hex(16)
+    hash_obj = hashlib.pbkdf2_hmac("sha256", senha.encode("utf-8"), salt.encode("utf-8"), 100_000)
+    return f"{salt}${hash_obj.hex()}"
+
+def _verificar_senha(senha_digitada: str, senha_salva: str) -> bool:
+    try:
+        salt, _ = senha_salva.split("$")
+        return _gerar_hash_senha(senha_digitada, salt) == senha_salva
+    except ValueError:
+        return False
+
+def register_user(data: UserRegisterSchema):
+    if user_collection.find_one({"$or": [{"email": data.email.lower()}, {"cpf": data.cpf}]}):
+        raise HTTPException(status_code = 409, detail = "Já existe uma conta com esse e-mail ou CPF")
+
+    user_dict = data.model_dump()
+    user_dict["email"] = data.email.lower().strip()
+    user_dict["senha"] = _gerar_hash_senha(data.senha)
+
+    result = user_collection.insert_one(user_dict)
+    return {"id": str(result.inserted_id), "mensagem": "Usuário cadastrado com sucesso"}
+
+def login_user(data: UserLoginSchema):
+    user = user_collection.find_one({"email": data.email.lower().strip()})
+
+    if not user or not _verificar_senha(data.senha, user["senha"]):
+        raise HTTPException(status_code=401, detail="E-mail ou senha incorretos.")  
+
+    token = secrets.token_urlsafe(32)
+    return {
+        "access_token": token,
+        "token_type": "bearer",
+        "usuario": {
+            "id": str(user["_id"]),
+            "nome": user["nome"],
+            "email": user["email"]
+        }
+    }

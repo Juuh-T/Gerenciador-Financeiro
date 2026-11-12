@@ -20,3 +20,15 @@ class MetaSchema(BaseModel):
     valor_alvo: float = Field(..., gt=0)
     valor_guardado: float = Field(0.0, ge=0)
     prazo: str
+
+class UserRegisterSchema(BaseModel):
+    nome: str = Field(..., min_length=2)
+    telefone: str
+    cpf: str
+    email: str
+    data_nascimento: str
+    senha: str = Field(..., min_length=8)
+
+class UserLoginSchema(BaseModel):
+    email: str
+    senha: str

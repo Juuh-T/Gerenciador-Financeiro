@@ -1,5 +1,11 @@
 from fastapi import APIRouter
-from app.models import TransactionSchema, BudgetSchema, MetaSchema
+from app.models import (
+    TransactionSchema, 
+    BudgetSchema, 
+    MetaSchema, 
+    UserRegisterSchema, 
+    UserLoginSchema
+)
 from app.services import (
     create_transaction, 
     list_transactions, 
@@ -10,7 +16,10 @@ from app.services import (
     list_metas,
     update_meta_valor,
     delete_meta_db,
-    update_meta_completa
+    update_meta_completa,
+    delete_meta_db,
+    register_user,
+    login_user
 )
 
 router = APIRouter()
@@ -58,3 +67,12 @@ def remove_meta(meta_id: str):
 @router.put("/metas/{meta_id}")
 def edit_meta(meta_id: str, meta: MetaSchema):
     return {"success": update_meta_completa(meta_id, meta)}
+
+# --- ROTAS DE AUTENTICAÇÃO ---
+@router.post("/auth/register", status_code=201)
+def register(user: UserRegisterSchema):
+    return register_user(user)
+
+@router.post("/auth/login")
+def login(credentials: UserLoginSchema):
+    return login_user(credentials)
