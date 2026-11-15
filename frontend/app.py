@@ -12,7 +12,10 @@ from api import (
     criar_meta,
     atualizar_valor_meta,
     editar_meta_api,
-    excluir_meta_api
+    excluir_meta_api,
+    buscar_relatorio,
+    baixar_relatorio_excel,
+    baixar_relatorio_pdf
 )
 from auth import acesso_autenticado
 
@@ -565,6 +568,92 @@ elif pagina == "Metas":
 
 elif pagina == "Relatórios":
     st.subheader("Relatórios Financeiros")
+    st.write("Analise suas receitas e despesas por período e exporte sua planilha.")
+
+    hoje = date.today()
+    inicio_mes = hoje.replace(day=1)
+
+    with st.container(border=True):
+        col_ini, col_fim = st.columns(2)
+        with col_ini:
+            data_inicio = st.date_input("Data inicial", value=inicio_mes, format="DD/MM/YYYY")
+        with col_fim:
+            data_fim = st.date_input("Data final", value=hoje, format="DD/MM/YYYY")
+
+    if data_inicio > data_fim:
+        st.error("A data inicial não pode ser maior que a data final.")
+    else:
+        relatorio = buscar_relatorio(data_inicio.isoformat(), data_fim.isoformat())
+
+        if relatorio:
+            resumo = relatorio["resumo"]
+            col1, col2, col3 = st.columns(3)
+            col1.metric("Receitas no Período", f"R$ {resumo['total_receitas']:.2f}", border=True)
+            col2.metric("Despesas no Período", f"R$ {resumo['total_despesas']:.2f}", border=True)
+            col3.metric("Saldo do Período", f"R$ {resumo['saldo_periodo']:.2f}", border=True)
+
+            # Gráfico de Receitas x Despesas no período
+            with st.container(border=True):
+                st.write("**Receitas vs. Despesas no Período**")
+                if relatorio["grafico"]:
+                    df_graf = pd.DataFrame(relatorio["grafico"])
+                    df_graf["data"] = pd.to_datetime(df_graf["data"]).dt.strftime("%d/%m/%Y")
+                    df_graf = df_graf.set_index("data")
+                    st.bar_chart(
+                        df_graf[["Receita", "Despesa"]],
+                        color=["#22c55e", "#ef4444"],
+                        stack=False
+                    )
+                else:
+                    st.info("Nenhuma movimentação encontrada para gerar o gráfico neste período.")
+
+            # Planilha Pandas + Botões de Exportação (Excel e PDF)
+            with st.container(border=True):
+                st.write("**Detalhamento das Transações**")
+                if relatorio["transacoes"]:
+                    df_tabela = pd.DataFrame(relatorio["transacoes"])
+                    if "_id" in df_tabela.columns:
+                        df_tabela = df_tabela.drop(columns=["_id", "user_id"], errors="ignore")
+                    if "data" in df_tabela.columns:
+                        df_tabela["data"] = pd.to_datetime(df_tabela["data"]).dt.strftime("%d/%m/%Y")
+
+                    st.dataframe(
+                        df_tabela,
+                        hide_index=True,
+                        width="stretch",
+                        column_config={
+                            "descricao": "Descrição",
+                            "tipo": "Tipo",
+                            "categoria": "Categoria",
+                            "data": "Data",
+                            "observacao": "Observação",
+                            "valor": st.column_config.NumberColumn("Valor (R$)", format="R$ %.2f")
+                        }
+                    )
+
+                    col_btn_excel, col_btn_pdf = st.columns(2)
+                    with col_btn_excel:
+                        arquivo_excel = baixar_relatorio_excel(data_inicio.isoformat(), data_fim.isoformat())
+                        if arquivo_excel:
+                            st.download_button(
+                                label="📥 Baixar Planilha em Excel (.xlsx)",
+                                data=arquivo_excel,
+                                file_name=f"relatorio_{data_inicio}_{data_fim}.xlsx",
+                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                width="stretch"
+                            )
+                    with col_btn_pdf:
+                        arquivo_pdf = baixar_relatorio_pdf(data_inicio.isoformat(), data_fim.isoformat())
+                        if arquivo_pdf:
+                            st.download_button(
+                                label="📄 Baixar Relatório em PDF (.pdf)",
+                                data=arquivo_pdf,
+                                file_name=f"relatorio_{data_inicio}_{data_fim}.pdf",
+                                mime="application/pdf",
+                                width="stretch"
+                            )
+                else:
+                    st.info("Nenhuma transação registrada entre as datas selecionadas.")
 
 # ----------------------------------------- Conversor de Moedas ------------------------------------------
 

@@ -145,3 +145,43 @@ def excluir_meta_api(meta_id):
         print(f"Erro ao excluir meta: {e}")
         return False
 
+# ---- Funções de RELATÓRIOS ----
+
+def buscar_relatorio(data_inicio: str, data_fim: str):
+    try:
+        response = requests.get(
+            f"{API_URL}/reports/",
+            params={"data_inicio": data_inicio, "data_fim": data_fim},
+            headers=_headers_usuario(),
+            timeout=10
+        )
+        if response.status_code == 200:
+            return response.json()
+        return None
+    except Exception as e:
+        print(f"Erro ao buscar relatório: {e}")
+        return None
+
+def baixar_relatorio_excel(data_inicio: str, data_fim: str):
+    try:
+        response = requests.get(
+            f"{API_URL}/reports/export/excel",
+            params={"data_inicio": data_inicio, "data_fim": data_fim},
+            headers=_headers_usuario(),
+            timeout=10
+        )
+        return response.content if response.status_code == 200 else None
+    except Exception:
+        return None
+
+def baixar_relatorio_pdf(data_inicio: str, data_fim: str):
+    try:
+        response = requests.get(
+            f"{API_URL}/reports/export/pdf",
+            params={"data_inicio": data_inicio, "data_fim": data_fim},
+            headers=_headers_usuario(),
+            timeout=10
+        )
+        return response.content if response.status_code == 200 else None
+    except Exception:
+        return None

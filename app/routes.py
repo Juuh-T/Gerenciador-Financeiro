@@ -18,7 +18,10 @@ from app.services import (
     update_meta_completa,
     delete_meta_db,
     register_user,
-    login_user
+    login_user,
+    get_relatorio_periodo,
+    exportar_relatorio_excel,
+    exportar_relatorio_pdf
 )
 
 router = APIRouter()
@@ -74,3 +77,16 @@ def register(user: UserRegisterSchema):
 @router.post("/auth/login")
 def login(credentials: UserLoginSchema):
     return login_user(credentials)
+
+# --- ROTAS DE RELATÓRIOS ---
+@router.get("/reports/")
+def get_report(data_inicio: str, data_fim: str, x_user_id: str = Header(default="")):
+    return get_relatorio_periodo(x_user_id, data_inicio, data_fim)
+
+@router.get("/reports/export/excel")
+def download_report_excel(data_inicio: str, data_fim: str, x_user_id: str = Header(default="")):
+    return exportar_relatorio_excel(x_user_id, data_inicio, data_fim)
+
+@router.get("/reports/export/pdf")
+def download_report_pdf(data_inicio: str, data_fim: str, x_user_id: str = Header(default="")):
+    return exportar_relatorio_pdf(x_user_id, data_inicio, data_fim)
