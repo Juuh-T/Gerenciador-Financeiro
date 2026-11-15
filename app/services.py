@@ -15,6 +15,14 @@ from app.models import (
     UserLoginSchema
     )
 
+# ------ Conexão Banco de Dados ------
+
+db = get_database()
+collection = db["transactions"]
+budgets_collection = db["budgets"]
+metas_collection = db["metas"]
+user_collection = db["users"]
+
 # ------ Lógica de Autenticação ------
 
 def _gerar_hash_senha(senha: str, salt: str = None) -> str:
@@ -57,14 +65,6 @@ def login_user(data: UserLoginSchema):
             "email": user["email"]
         }
     }
-
-# ------ Conexão Banco de Dados ------
-
-db = get_database()
-collection = db["transactions"]
-budgets_collection = db["budgets"]
-metas_collection = db["metas"]
-user_collection = db["users"]
 
 # ------ Validar Usuário ------
 
@@ -252,7 +252,7 @@ def exportar_relatorio_excel(user_id: str, data_inicio: str, data_fim: str):
     buffer.seek(0)
 
     headers = {
-        "Content-Disposition": f'attachment; filename="relatorio Financeiro de {data_inicio} a {data_fim}.xlsx"'
+        "Content-Disposition": f'attachment; filename="relatorio_financeiro_{data_inicio}_a_{data_fim}.xlsx"'
     }
     return StreamingResponse(
         buffer,

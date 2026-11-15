@@ -32,25 +32,16 @@ def buscar_cotacoes():
 
 st.set_page_config(page_title="Gerenciador Financeiro", layout="wide")
 
-# ========================================================================================
-# Modo de desenvolvimento (usar False antes de publicar)
-MODO_DESENVOLVIMENTO = True
-
-if not MODO_DESENVOLVIMENTO:
-    if not acesso_autenticado():
-        st.stop()
-# ========================================================================================
+if not acesso_autenticado():
+    st.stop()
 
 if "orcamentos" not in st.session_state:
     st.session_state["orcamentos"] = []
 if "pagina_atual" not in st.session_state:
-    st.session_state["pagina_atual"] = "Conversor de Moedas" ##MUDAR AQUI PARA VOLTAR AO NORMAL
+    st.session_state["pagina_atual"] = "Dashboard"
 
 st.title("💰 Gerenciador Financeiro")
 st.write("Controle suas receitas, despesas e metas financeiras em um só lugar")
-
-# ----------------------------------------------------------------------------------------
-
 st.sidebar.title("Finanças")
 st.sidebar.caption("GERENCIADOR FINANCEIRO")
 st.sidebar.divider()
@@ -146,7 +137,7 @@ elif pagina == "Transações":
             if filtro_tipo != "Todos":
                 df = df[df["tipo"] == filtro_tipo]
             if "_id" in df.columns:
-                df = df.drop(columns=["_id"])
+                df = df.drop(columns=["_id", "user_id"], errors="ignore")
             if "data" in df.columns:
                 df["data"] = pd.to_datetime(df["data"], errors="coerce").dt.strftime("%d/%m/%Y")
 
@@ -603,7 +594,6 @@ elif pagina == "Relatórios":
             col2.metric("Despesas no Período", f"R$ {resumo['total_despesas']:.2f}", border=True)
             col3.metric("Saldo do Período", f"R$ {resumo['saldo_periodo']:.2f}", border=True)
 
-            # Gráfico de Receitas x Despesas no período
             with st.container(border=True):
                 st.write("**Receitas vs. Despesas no Período**")
                 if relatorio["grafico"]:
@@ -618,7 +608,6 @@ elif pagina == "Relatórios":
                 else:
                     st.info("Nenhuma movimentação encontrada para gerar o gráfico neste período.")
 
-            # Planilha Pandas + Botões de Exportação (Excel e PDF)
             with st.container(border=True):
                 st.write("**Detalhamento das Transações**")
                 if relatorio["transacoes"]:

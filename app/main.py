@@ -4,7 +4,6 @@ from app.routes import router
 
 app = FastAPI(title="Gerenciador Financeiro API")
 
-# Habilita CORS para permitir que o front-end faça requisições
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
