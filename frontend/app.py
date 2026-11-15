@@ -1,5 +1,7 @@
 import streamlit as st
 import pandas as pd
+import requests
+from datetime import datetime
 from datetime import date
 
 from api import (
@@ -16,11 +18,20 @@ from api import (
 )
 from auth import acesso_autenticado
 
+@st.cache_data(ttl=60)
+def buscar_cotacoes():
+    url = "https://economia.awesomeapi.com.br/json/last/USD-BRL,EUR-BRL"
+
+    resposta = requests.get(url, timeout=10)
+    resposta.raise_for_status()
+
+    return resposta.json()
+
 st.set_page_config(page_title="Gerenciador Financeiro", layout="wide")
 
 # ========================================================================================
 # Modo de desenvolvimento (usar False antes de publicar)
-MODO_DESENVOLVIMENTO = False
+MODO_DESENVOLVIMENTO = True
 
 if not MODO_DESENVOLVIMENTO:
     if not acesso_autenticado():
@@ -30,7 +41,7 @@ if not MODO_DESENVOLVIMENTO:
 if "orcamentos" not in st.session_state:
     st.session_state["orcamentos"] = []
 if "pagina_atual" not in st.session_state:
-    st.session_state["pagina_atual"] = "Dashboard"
+    st.session_state["pagina_atual"] = "Conversor de Moedas" ##MUDAR AQUI PARA VOLTAR AO NORMAL
 
 st.title("💰 Gerenciador Financeiro")
 st.write("Controle suas receitas, despesas e metas financeiras em um só lugar")
@@ -570,3 +581,146 @@ elif pagina == "Relatórios":
 
 elif pagina == "Conversor de Moedas":
     st.subheader("Conversor de Moedas")
+
+    st.markdown("""
+        <style>
+        /* Títulos dos cards */
+        [data-testid="stMetricLabel"] p {
+            font-size: 18px !important;
+            font-weight: 500 !important;
+        }
+
+        /* Datas e textos informativos */
+        [data-testid="stCaptionContainer"] p {
+            font-size: 16px !important;
+        }
+
+        /* Nomes dos campos: De, Para e Valor */
+        [data-testid="stWidgetLabel"] p {
+            font-size: 17px !important;
+        }
+        </style>
+        """, unsafe_allow_html=True)
+
+
+    if "moeda_origem" not in st.session_state:
+        st.session_state["moeda_origem"] = "BRL"
+    if "moeda_destino" not in st.session_state:
+        st.session_state["moeda_destino"] = "USD"
+
+    col1, col_inverter, col2 = st.columns(
+        [4, 1, 4],
+        gap="small",
+        vertical_alignment="bottom"
+    )
+    
+    def inverter_moedas():
+            origem_atual = st.session_state["moeda_origem"]
+    
+            st.session_state["moeda_origem"] = st.session_state["moeda_destino"]
+            st.session_state["moeda_destino"] = origem_atual
+    
+    with col1:
+        moeda_origem = st.selectbox("De", ["BRL", "USD", "EUR"], key="moeda_origem")
+    with col_inverter:
+        st.button(
+            "⇄",
+            key="botao_inverter",
+            help="Inverter moedas",
+            on_click=inverter_moedas,
+            type="tertiary",
+            width="stretch"
+        )
+        st.markdown("""
+            <style>
+            .st-key-botao_inverter button {
+                transform: translateY(20px);
+                border: none !important;
+                background: transparent !important;
+                box-shadow: none !important;
+                min-height: 54px !important;
+            }
+
+            .st-key-botao_inverter button p {
+                font-size: 38px !important;
+                line-height: 1 !important;
+            }
+            </style>
+            """, unsafe_allow_html=True)
+    with col2:
+        moeda_destino = st.selectbox("Para", ["BRL", "USD", "EUR"], key="moeda_destino")
+
+    valor = st.number_input(
+        "Valor que deseja converter", min_value=0.0, value=0.0, step=0.01, format="%.2f"
+    )
+
+    if st.button(
+        "Atualizar cotações",
+        icon=":material/refresh:",
+        key="atualizar_cotacoes"
+    ):
+        buscar_cotacoes.clear()    
+
+    try:
+        dados_moedas = buscar_cotacoes()
+ 
+        cotacao_dolar = float(dados_moedas["USDBRL"]["bid"])
+        cotacao_euro = float(dados_moedas["EURBRL"]["bid"])
+
+        data_dolar = dados_moedas["USDBRL"]["create_date"]
+        data_euro = dados_moedas["EURBRL"]["create_date"]
+
+        data_dolar_formatada = datetime.fromisoformat(data_dolar).strftime("%d/%m/%Y às %H:%M")
+        data_euro_formatada = datetime.fromisoformat(data_euro).strftime("%d/%m/%Y às %H:%M")
+ 
+        cotacoes = {
+            "BRL": 1.0,
+            "USD": cotacao_dolar,
+            "EUR": cotacao_euro
+        }
+
+        resultado = valor * cotacoes[moeda_origem] / cotacoes[moeda_destino]
+        taxa_conversao = cotacoes[moeda_origem] / cotacoes[moeda_destino]
+        taxa_formatada = f"{taxa_conversao:,.4f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+        simbolos = {
+            "BRL": "R$",
+            "USD": "US$",
+            "EUR": "€"
+        }
+        simbolo_destino = simbolos[moeda_destino]
+        resultado_formatado = f"{resultado:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+        with st.container(border=True):
+            st.metric(
+                "Resultado da conversão",
+                f"{simbolo_destino} {resultado_formatado}"
+            )
+            st.caption(f"1 {moeda_origem} = {taxa_formatada} {moeda_destino}")
+
+        col_dolar, col_euro = st.columns(2, gap="small")
+
+        with col_dolar:
+            with st.container(border=True):
+                st.metric(
+                    label="Cotação do Dólar (USD/BRL)",
+                    value=f"R$ {cotacao_dolar:.4f}".replace(".", ",")
+                )
+                st.caption(f"Última atualização: {data_dolar_formatada}")
+
+        with col_euro:
+            with st.container(border=True):
+                st.metric(
+                    label="Cotação do Euro (EUR/BRL)",
+                    value=f"R$ {cotacao_euro:.4f}".replace(".", ",")
+                )
+                st.caption(f"Última atualização: {data_euro_formatada}")
+        
+        st.info(
+            "Os valores apresentados são estimativas baseadas nas cotações "
+            "disponibilizadas pela AwesomeAPI. A conversão não inclui "
+            "taxas bancárias, impostos ou tarifas adicionais.",
+            icon=":material/info:")
+
+    except (requests.exceptions.RequestException, ValueError, KeyError, TypeError, ZeroDivisionError):
+        st.error("Não foi possível consultar ou calcular as cotações. Tente novamente.")
