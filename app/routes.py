@@ -1,4 +1,4 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Header
 from app.models import (
     TransactionSchema, 
     BudgetSchema, 
@@ -15,7 +15,6 @@ from app.services import (
     create_meta,
     list_metas,
     update_meta_valor,
-    delete_meta_db,
     update_meta_completa,
     delete_meta_db,
     register_user,
@@ -26,47 +25,46 @@ router = APIRouter()
 
 # --- ROTAS DE TRANSAÇÃO ---
 @router.post("/transactions/")
-def add_transaction(transaction: TransactionSchema):
-    return create_transaction(transaction)
+def add_transaction(transaction: TransactionSchema, x_user_id: str = Header(default="")):
+    return create_transaction(transaction, x_user_id)
 
 @router.get("/transactions/")
-def get_all_transaction():
-    return list_transactions()
+def get_transaction(x_user_id: str = Header(default="")):
+    return list_transactions(x_user_id)
 
 @router.get("/transactions/summary")
-def summary():
-    return get_dashboard_summary()
+def get_summary(x_user_id: str = Header(default="")):
+    return get_dashboard_summary(x_user_id)
 
 # --- ROTAS DE ORÇAMENTO ---
 @router.post("/budgets/")
-def add_budget(budget: BudgetSchema):
-    return create_or_update_budget(budget)
+def add_budget(budget: BudgetSchema, x_user_id: str = Header(default="")):
+    return create_or_update_budget(budget, x_user_id)
 
 @router.get("/budgets/")
-def get_budgets():
-    return list_budgets_with_progress()
+def get_budgets(x_user_id: str = Header(default="")):
+    return list_budgets_with_progress(x_user_id)
 
 # --- ROTAS DE METAS ---
 @router.post("/metas/")
-def add_meta(meta: MetaSchema):
-    return create_meta(meta)
+def add_meta(meta: MetaSchema, x_user_id: str = Header(default="")):
+    return create_meta(meta, x_user_id)
 
 @router.get("/metas/")
-def get_all_metas():
-    return list_metas()
+def get_all_metas(x_user_id: str = Header(default="")):
+    return list_metas(x_user_id)
 
-@router.put("/metas/{meta_id}/valor/")
-def update_valor(meta_id: str, payload: dict):
-    valor_guardado = payload.get("valor_guardado", 0.0)
-    return {"sucesso": update_meta_valor(meta_id, valor_guardado)}
-
-@router.delete("/metas/{meta_id}")
-def remove_meta(meta_id: str):
-    return {"sucess": delete_meta_db(meta_id)}
+@router.put("/metas/{meta_id}/valor")
+def update_valor_meta(meta_id: str, body: dict, x_user_id: str = Header(default="")):
+    return {"sucesso": update_meta_valor(meta_id, body.get("valor_guardado", 0.0), x_user_id)}
 
 @router.put("/metas/{meta_id}")
-def edit_meta(meta_id: str, meta: MetaSchema):
-    return {"success": update_meta_completa(meta_id, meta)}
+def edit_meta(meta_id: str, meta: MetaSchema, x_user_id: str = Header(default="")):
+    return {"success": update_meta_completa(meta_id, meta, x_user_id)}
+
+@router.delete("/metas/{meta_id}")
+def remove_meta(meta_id: str, x_user_id: str = Header(default="")):
+    return {"sucess": delete_meta_db(meta_id, x_user_id)}
 
 # --- ROTAS DE AUTENTICAÇÃO ---
 @router.post("/auth/register", status_code=201)

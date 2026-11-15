@@ -19,65 +19,64 @@ budgets_collection = db["budgets"]
 metas_collection = db["metas"]
 user_collection = db["users"]
 
+# ------ Validar Usuário ------
+
+def _validar_user_id(user_id: str):
+    if not user_id or not user_id.strip():
+        raise HTTPException(status_code=401, detail="Usuario não identificado na requisição")
+    return user_id.strip()
+
 # ------ Lógica Transação ------
 
-def create_transaction(data: TransactionSchema):
+def create_transaction(data: TransactionSchema, user_id: str):
+    uid = _validar_user_id(user_id)
     transaction_dict = data.model_dump()
+    transaction_dict["user_id"] = uid
     result = collection.insert_one(transaction_dict)
     transaction_dict["_id"] = str(result.inserted_id)
     return transaction_dict
 
-def list_transactions():
-    transactions = list(collection.find())
+def list_transactions(user_id: str):
+    uid = _validar_user_id(user_id)
+    transactions = list(collection.find({"user_id": uid}))
     for item in transactions:
         item["_id"] = str(item["_id"])
     return transactions
 
-def get_dashboard_summary():
-    transactions = list(collection.find())
-
-    saldo_atual = 0.0
-    receita_mes = 0.0
-    despesa_mes = 0.0
-
-    for t in transactions:
-        val = float(t.get("valor", 0))
-        if t.get("tipo") == "Receita":
-            saldo_atual += val
-            receita_mes += val
-        elif t.get("tipo") == "Despesa":
-            saldo_atual -= val
-            despesa_mes += val
-
-    economia_mes = receita_mes - despesa_mes
-
+def get_dashboard_summary(user_id: str):
+    uid = _validar_user_id(user_id)
+    transactions = list(collection.find({"user_id": uid}))
+    receitas = sum(float(t.get("valor", 0)) for t in transactions if str(t.get("tipo", "")). lower() == "receita")
+    despesas = sum(float(t.get("valor", 0)) for t in transactions if str(t.get("tipo", "")). lower() == "despesa")
+    saldo = receitas - despesas
     return {
-        "saldo_atual": saldo_atual,
-        "receita_mes": receita_mes,
-        "despesa_mes": despesa_mes,
-        "economia_mes": economia_mes
+        "saldo_atual": saldo,
+        "receita_mes": receitas,
+        "despesa_mes": despesas,
+        "economia_mes": saldo
     }
 
 # ------ Lógica Orçamento ------
 
-def create_or_update_budget(data: BudgetSchema):
-    budget_dict = data.model_dump()
-    result = budgets_collection.update_one(
-        {"categoria": data.categoria},
-        {"$set": budget_dict},
+def create_or_update_budget(data: BudgetSchema, user_id: str):
+    uid = _validar_user_id(user_id)
+    budgets_collection.update_one(
+        {"user_id": uid, "categoria": data.categoria},
+        {"$set": {"user_id": uid, "categoria": data.categoria, "limite": data.limite}},
         upsert=True
     )
-    return budget_dict
+    return {"categoria": data.categoria, "limite": data.limite}
 
-def list_budgets_with_progress():
-    budgets = list(budgets_collection.find())
-    transactions = list(collection.find({"tipo": "Despesa"}))
+def list_budgets_with_progress(user_id: str):
+    uid = _validar_user_id(user_id)
+    budgets = list(budgets_collection.find({"user_id": uid}))
+    transactions = list(collection.find({"user_id": uid}))
 
     gastos_por_categoria = {}
     for t in transactions:
         cat = t.get("categoria")
         val = float(t.get("valor", 0))
-        if cat:
+        if cat and str(t.get("tipo", "")).lower() == "despesa":
             gastos_por_categoria[cat] = gastos_por_categoria.get(cat, 0.0) + val
 
     resultado = []
@@ -99,33 +98,40 @@ def list_budgets_with_progress():
 
 # ------ Lógica de Metas ------
 
-def create_meta(data: MetaSchema):
+def create_meta(data: MetaSchema, user_id: str):
+    uid = _validar_user_id(user_id)
     meta_dict = data.model_dump()
+    meta_dict["user_id"] = uid
     result = metas_collection.insert_one(meta_dict)
     meta_dict["_id"] = str(result.inserted_id)
     return meta_dict
 
-def list_metas():
-    metas = list(metas_collection.find())
+def list_metas(user_id: str):
+    uid = _validar_user_id(user_id)
+    metas = list(metas_collection.find({"user_id": uid}))
     for item in metas:
         item["_id"] = str(item["_id"])
     return metas
 
-def update_meta_valor(meta_id: str, valor_guardado: float):
+def update_meta_valor(meta_id: str, valor_guardado: float, user_id: str):
+    uid = _validar_user_id(user_id)
     metas_collection.update_one(
-        {"_id": ObjectId(meta_id)},
+        {"_id": ObjectId(meta_id), "user_id": uid},
         {"$set": {"valor_guardado": valor_guardado}}
     )
     return True
 
-def delete_meta_db(meta_id: str):
-    metas_collection.delete_one({"_id": ObjectId(meta_id)})
+def delete_meta_db(meta_id: str, user_id: str):
+    uid = _validar_user_id(user_id)
+    metas_collection.delete_one({"_id": ObjectId(meta_id), "user_id": uid})
     return True
 
-def update_meta_completa(meta_id: str, data: MetaSchema):
+def update_meta_completa(meta_id: str, data: MetaSchema, user_id: str):
+    uid = _validar_user_id(user_id)
     meta_dict = data.model_dump()
+    meta_dict["user_id"] = uid
     metas_collection.update_one(
-        {"_id": ObjectId(meta_id)},
+        {"_id": ObjectId(meta_id), "user_id": uid},
         {"$set": meta_dict}
     )
     return True

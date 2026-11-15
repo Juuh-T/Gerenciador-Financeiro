@@ -1,12 +1,20 @@
 import requests
-
+import streamlit as st
 API_URL = "http://127.0.0.1:8000"
+
+def _headers_usuario():
+    user_id = st.session_state.get("auth_user_id", "")
+    return {"X-User-Id": str(user_id)}
 
 # ---- Funções GET ----
 
 def buscar_transacoes():
     try:
-        response = requests.get(f"{API_URL}/transactions/", timeout=10)
+        response = requests.get(
+            f"{API_URL}/transactions/",
+            headers=_headers_usuario(),
+            timeout=10
+        )
         response.raise_for_status()
         dados = response.json()
         return dados if isinstance(dados, list) else None
@@ -14,24 +22,13 @@ def buscar_transacoes():
         print(f"Erro ao buscar transações: {erro}")
         return None
 
-
-# def buscar_transacoes():
-#     try:
-#         response = requests.get(f"{API_URL}/transactions/")
-#         if response.status_code == 200:
-#             return response.json()
-
-#         else:
-#             print(f"Erro na API: Status {response.status_code}")
-#             return []
-
-#     except Exception as e:
-#         print(f"Erro ao buscar transações: {e}")
-#     return []
-
 def buscar_resumo_dashboard():
     try:
-        response = requests.get(f"{API_URL}/transactions/summary")
+        response = requests.get(
+            f"{API_URL}/transactions/summary",
+            headers=_headers_usuario(),
+            timeout=5
+        )
         if response.status_code == 200:
             return response.json()
     except Exception:
@@ -45,25 +42,39 @@ def buscar_resumo_dashboard():
 
 def buscar_orcamentos():
     try:
-        response = requests.get(f"{API_URL}/budgets/", timeout=5)
+        response = requests.get(
+            f"{API_URL}/budgets/",
+            headers=_headers_usuario(),
+            timeout=5
+        )
         if response.status_code == 200:
             return response.json()
+        return []
     except Exception as e:
         print(f"Erro ao buscar orçamentos {e}")
         return []
-
 # ---- Funções POST ----
 
 def criar_transacao(payload):
     try:
-        response = requests.post(f"{API_URL}/transactions/", json=payload, timeout=5)
+        response = requests.post(
+            f"{API_URL}/transactions/",
+            json=payload,
+            headers=_headers_usuario(),
+            timeout=5
+        )
         return response.status_code in [200, 201]
     except Exception:
         return False
 
 def criar_orcamento(payload):
     try:
-        response = requests.post(f"{API_URL}/budgets/", json=payload, timeout=5)
+        response = requests.post(
+            f"{API_URL}/budgets/",
+            json=payload,
+            headers=_headers_usuario(),
+            timeout=5
+        )
         return response.status_code in [200, 201]
     except Exception:
         return False
@@ -72,7 +83,11 @@ def criar_orcamento(payload):
 
 def buscar_metas():
     try:
-        response = requests.get(f"{API_URL}/metas/", timeout=5)
+        response = requests.get(
+            f"{API_URL}/metas/",
+            headers=_headers_usuario(),
+            timeout=5
+        )
         if response.status_code == 200:
             return response.json()
         return []
@@ -82,7 +97,12 @@ def buscar_metas():
 
 def criar_meta(payload):
     try:
-        response = requests.post(f"{API_URL}/metas/", json=payload, timeout=5)
+        response = requests.post(
+            f"{API_URL}/metas/",
+            json=payload,
+            headers=_headers_usuario(),
+            timeout=5
+        )
         return response.status_code in [200, 201]
     except Exception as e:
         print(f"Erro ao criar meta: {e}")
@@ -90,7 +110,11 @@ def criar_meta(payload):
 
 def atualizar_valor_meta(meta_id, valor_guardado):
     try:
-        response = requests.put(f"{API_URL}/metas/{meta_id}/valor", json={"valor_guardado": valor_guardado}, timeout=5)
+        response = requests.put(
+            f"{API_URL}/metas/{meta_id}/valor",
+            json={"valor_guardado": valor_guardado},
+            headers=_headers_usuario(), timeout=5
+        )
         return response.status_code == 200
     except Exception as e:
         print(f"Erro ao atualizar valor da meta: {e}")
@@ -98,7 +122,12 @@ def atualizar_valor_meta(meta_id, valor_guardado):
 
 def editar_meta_api(meta_id, payload):
     try:
-        response = requests.put(f"{API_URL}/metas/{meta_id}", json=payload, timeout=5)
+        response = requests.put(
+            f"{API_URL}/metas/{meta_id}",
+            json=payload,
+            headers=_headers_usuario(),
+            timeout=5
+        )
         return response.status_code == 200
     except Exception as e:
         print(f"Erro ao editar meta: {e}")
@@ -106,7 +135,11 @@ def editar_meta_api(meta_id, payload):
 
 def excluir_meta_api(meta_id):
     try:
-        response = requests.delete(f"{API_URL}/metas/{meta_id}", timeout=5)
+        response = requests.delete(
+            f"{API_URL}/metas/{meta_id}",
+            headers=_headers_usuario(),
+            timeout=5
+        )
         return response.status_code == 200
     except Exception as e:
         print(f"Erro ao excluir meta: {e}")

@@ -61,6 +61,7 @@ def _mudar_tela(tela: str):
 def sair_da_conta():
     st.session_state.pop("auth_token", None)
     st.session_state.pop("auth_nome", None)
+    st.session_state.pop("auth_user_id", None)
     st.session_state["auth_tela"] = "login"
     st.rerun()
 
@@ -149,6 +150,10 @@ def mostrar_login():
                     else:
                         st.session_state["auth_token"] = resultado["access_token"]
                         usuario = resultado.get("usuario") or {}
+                        st.session_state["auth_user_id"] = (
+                            usuario.get("id", "")
+                            if isinstance(usuario, dict) else ""
+                        )
                         st.session_state["auth_nome"] = (
                             usuario.get("nome", "Minha conta")
                             if isinstance(usuario, dict) else "Minha conta"
