@@ -12,6 +12,7 @@ from app.services import (
     get_dashboard_summary,
     create_or_update_budget,
     list_budgets_with_progress,
+    delete_budget,
     create_meta,
     list_metas,
     update_meta_valor,
@@ -21,7 +22,9 @@ from app.services import (
     login_user,
     get_relatorio_periodo,
     exportar_relatorio_excel,
-    exportar_relatorio_pdf
+    exportar_relatorio_pdf,
+    update_transaction,
+    delete_transaction
 )
 
 router = APIRouter()
@@ -39,6 +42,14 @@ def get_transaction(x_user_id: str = Header(default="")):
 def get_summary(x_user_id: str = Header(default="")):
     return get_dashboard_summary(x_user_id)
 
+@router.put("/transactions/{transaction_id}")
+def edit_transaction(transaction_id: str, transaction: TransactionSchema, x_user_id: str = Header(default="")):
+    return {"sucesso": update_transaction(transaction_id, transaction, x_user_id)}
+
+@router.delete("/transactions/{transaction_id}")
+def remove_transaction(transaction_id: str, x_user_id: str = Header(default="")):
+    return {"sucesso": delete_transaction(transaction_id, x_user_id)}
+
 # --- ROTAS DE ORÇAMENTO ---
 @router.post("/budgets/")
 def add_budget(budget: BudgetSchema, x_user_id: str = Header(default="")):
@@ -47,6 +58,10 @@ def add_budget(budget: BudgetSchema, x_user_id: str = Header(default="")):
 @router.get("/budgets/")
 def get_budgets(x_user_id: str = Header(default="")):
     return list_budgets_with_progress(x_user_id)
+
+@router.delete("/budgets/{budget_id}")
+def remove_budget(budget_id: str, x_user_id: str = Header(default="")):
+    return {"sucesso": delete_budget(budget_id, x_user_id)}
 
 # --- ROTAS DE METAS ---
 @router.post("/metas/")
@@ -63,11 +78,11 @@ def update_valor_meta(meta_id: str, body: dict, x_user_id: str = Header(default=
 
 @router.put("/metas/{meta_id}")
 def edit_meta(meta_id: str, meta: MetaSchema, x_user_id: str = Header(default="")):
-    return {"success": update_meta_completa(meta_id, meta, x_user_id)}
+    return {"sucesso": update_meta_completa(meta_id, meta, x_user_id)}
 
 @router.delete("/metas/{meta_id}")
 def remove_meta(meta_id: str, x_user_id: str = Header(default="")):
-    return {"sucess": delete_meta_db(meta_id, x_user_id)}
+    return {"sucesso": delete_meta_db(meta_id, x_user_id)}
 
 # --- ROTAS DE AUTENTICAÇÃO ---
 @router.post("/auth/register", status_code=201)

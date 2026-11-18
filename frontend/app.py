@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import altair as alt
 import requests
 from datetime import datetime
 from datetime import date
@@ -17,7 +18,10 @@ from api import (
     excluir_meta_api,
     buscar_relatorio,
     baixar_relatorio_excel,
-    baixar_relatorio_pdf
+    baixar_relatorio_pdf,
+    editar_transacao,
+    excluir_transacao,
+    excluir_orcamento,
 )
 from auth import acesso_autenticado
 
@@ -30,20 +34,171 @@ def buscar_cotacoes():
 
     return resposta.json()
 
+# ------------------------------------- Auxiliares do Dashboard -----------------------------------------
+
+MESES_ABREV = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"]
+MESES_NOME = [
+    "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
+    "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"
+]
+# Mesmas cores usadas no gráfico da página de Relatórios
+COR_RECEITA = "#22c55e"
+COR_DESPESA = "#ef4444"
+COR_SALDO = "#3b82f6"
+
+
+def formatar_moeda(numero):
+    sinal = "-" if round(numero, 2) < 0 else ""
+    return f"{sinal}R$ " + f"{abs(numero):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+def moeda_md(numero):
+    """Valor em reais para textos com markdown (o \\$ evita virar fórmula)."""
+    return formatar_moeda(numero).replace("$", "\\$")
+
+def eixo_reais(**opcoes):
+    """Eixo com rótulos no padrão brasileiro (R$ 1.500)."""
+    return alt.Axis(
+        title=None,
+        labelExpr="'R$ ' + replace(format(datum.value, ',.0f'), regexp(',', 'g'), '.')",
+        **opcoes
+    )
+
+
+def preparar_transacoes(transacoes):
+    """Converte a lista da API em DataFrame com data, valor e tipo padronizados."""
+    colunas_base = ["data", "valor", "tipo", "categoria", "descricao", "chave_mes"]
+    if not transacoes:
+        return pd.DataFrame(columns=colunas_base)
+
+    df = pd.DataFrame(transacoes)
+    if not {"data", "valor", "tipo"}.issubset(df.columns):
+        return pd.DataFrame(columns=colunas_base)
+
+    df["data"] = pd.to_datetime(df["data"], errors="coerce")
+    df["valor"] = pd.to_numeric(df["valor"], errors="coerce").fillna(0.0)
+    df["tipo"] = df["tipo"].astype(str).str.strip().str.casefold()
+    if "categoria" not in df.columns:
+        df["categoria"] = "Outros"
+    df["categoria"] = df["categoria"].fillna("Outros")
+    if "descricao" not in df.columns:
+        df["descricao"] = ""
+
+    df = df.dropna(subset=["data"])
+    df["chave_mes"] = df["data"].dt.strftime("%Y-%m")
+    return df
+
+
+def ultimos_meses(referencia: date, quantidade: int):
+    """Retorna [(ano, mes), ...] dos últimos meses, do mais antigo ao atual."""
+    ano, mes = referencia.year, referencia.month
+    lista = []
+    for _ in range(quantidade):
+        lista.append((ano, mes))
+        mes -= 1
+        if mes == 0:
+            mes, ano = 12, ano - 1
+    return list(reversed(lista))
+
+
+def totais_do_mes(df, chave_mes: str):
+    """Retorna (receitas, despesas) de um mês no formato 'AAAA-MM'."""
+    if df.empty:
+        return 0.0, 0.0
+    do_mes = df[df["chave_mes"] == chave_mes]
+    receitas = float(do_mes.loc[do_mes["tipo"] == "receita", "valor"].sum())
+    despesas = float(do_mes.loc[do_mes["tipo"] == "despesa", "valor"].sum())
+    return receitas, despesas
+
+
+def variacao_moeda(atual: float, anterior: float):
+    """Texto da variação para o st.metric (o sinal define a seta)."""
+    diferenca = round(atual - anterior, 2)
+    if diferenca == 0:
+        return "R$ 0,00"
+    sinal = "-" if diferenca < 0 else "+"
+    return f"{sinal}{formatar_moeda(abs(diferenca))}"
+
+
+def cor_variacao(delta: str, cor: str = "normal"):
+    """Deixa a variação cinza (sem seta colorida) quando não houve mudança."""
+    return cor if delta.startswith(("+", "-")) else "off"
+
+
+
 st.set_page_config(page_title="Gerenciador Financeiro", layout="wide")
 
-if not acesso_autenticado():
-    st.stop()
+# Modo de desenvolvimento
+MODO_DESENVOLVIMENTO = False
+
+if not MODO_DESENVOLVIMENTO:
+    if not acesso_autenticado():
+        st.stop()
+
 
 if "orcamentos" not in st.session_state:
     st.session_state["orcamentos"] = []
 if "pagina_atual" not in st.session_state:
     st.session_state["pagina_atual"] = "Dashboard"
 
-st.title("💰 Gerenciador Financeiro")
-st.write("Controle suas receitas, despesas e metas financeiras em um só lugar")
-st.sidebar.title("Finanças")
-st.sidebar.caption("GERENCIADOR FINANCEIRO")
+st.markdown(
+    """
+    <style>
+      .block-container { padding-top: 2.2rem; }
+
+      /* Cabeçalho no mesmo estilo da tela de login */
+      .gf-topo { display: flex; align-items: center; gap: 14px; margin-bottom: 1.4rem; }
+      .gf-logo {
+          flex-shrink: 0; font-size: 40px; line-height: 1;
+          display: flex; align-items: center; justify-content: center;
+      }
+      .gf-titulo { font-size: 1.6rem; font-weight: 700; line-height: 1.2; }
+      .gf-subtitulo { opacity: .65; font-size: .9rem; }
+
+      /* Marca na barra lateral */
+      .gf-marca { display: flex; align-items: center; gap: 10px; margin: .3rem 0 .2rem; }
+      .gf-marca-nome { font-weight: 700; font-size: 1.05rem; line-height: 1.2; }
+      .gf-marca-sub { opacity: .6; font-size: .68rem; letter-spacing: .08em; }
+
+      /* Números dos cards em destaque */
+      [data-testid="stMetricValue"] { font-weight: 700; }
+      [data-testid="stMetricLabel"] p { opacity: .75; }
+
+      /* Botões de salvar dos formulários em azul */
+      [data-testid="stFormSubmitButton"] button {
+          background: #2563EB; color: #ffffff; border: none; font-weight: 600;
+      }
+      [data-testid="stFormSubmitButton"] button:hover {
+          background: #1d4ed8; color: #ffffff;
+      }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
+st.markdown(
+    """
+    <div class="gf-topo">
+      <div class="gf-logo">💰</div>
+      <div>
+        <div class="gf-titulo">Gerenciador Financeiro</div>
+        <div class="gf-subtitulo">Controle suas receitas, despesas e metas financeiras em um só lugar</div>
+      </div>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
+
+st.sidebar.markdown(
+    """
+    <div class="gf-marca">
+      <div>
+        <div class="gf-marca-nome">Finanças</div>
+        <div class="gf-marca-sub">GERENCIADOR FINANCEIRO</div>
+      </div>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
 st.sidebar.divider()
 
 def navegar(destino):
@@ -67,27 +222,304 @@ for nome, icone in paginas.items():
 pagina = st.session_state["pagina_atual"]
 
 # -------------------------------------------- Dashboard ----------------------------------------------
-
 if pagina == "Dashboard":
     st.subheader("Visão Geral")
     dados = buscar_resumo_dashboard()
+    transacoes_dash = buscar_transacoes()
+    df_dash = preparar_transacoes(transacoes_dash)
+
+    hoje = date.today()
+    (ano_ant, mes_ant), (ano_atual, mes_atual) = ultimos_meses(hoje, 2)
+    chave_atual = f"{ano_atual:04d}-{mes_atual:02d}"
+    chave_anterior = f"{ano_ant:04d}-{mes_ant:02d}"
+    nome_mes_atual = f"{MESES_NOME[mes_atual - 1]} de {ano_atual}"
+    texto_comparacao = f"Comparado a {MESES_NOME[mes_ant - 1]} de {ano_ant}"
+
+    if transacoes_dash is None:
+        # Sem a lista de transações, mantém os totais calculados pela API.
+        receita_mes, despesa_mes = dados["receita_mes"], dados["despesa_mes"]
+        receita_ant, despesa_ant = receita_mes, despesa_mes
+    else:
+        receita_mes, despesa_mes = totais_do_mes(df_dash, chave_atual)
+        receita_ant, despesa_ant = totais_do_mes(df_dash, chave_anterior)
+    economia_mes = receita_mes - despesa_mes
+    economia_ant = receita_ant - despesa_ant
+
+    st.caption(f"Movimentações do mês: {nome_mes_atual}")
+
+    delta_saldo = variacao_moeda(economia_mes, 0)
+    delta_receita = variacao_moeda(receita_mes, receita_ant)
+    delta_despesa = variacao_moeda(despesa_mes, despesa_ant)
+    delta_economia = variacao_moeda(economia_mes, economia_ant)
 
     col1, col2 = st.columns(2, gap="small")
     with col1:
-        st.metric(label="Saldo Atual", value=f"R$ {dados['saldo_atual']:.2f}", border=True)
+        st.metric(
+            label="Saldo Atual", value=formatar_moeda(dados["saldo_atual"]), border=True,
+            delta=delta_saldo, delta_color=cor_variacao(delta_saldo),
+            help="Receitas menos despesas de todas as transações. A variação mostra quanto o saldo mudou neste mês."
+        )
     with col2:
-        st.metric(label="Receita do Mês", value=f"R$ {dados['receita_mes']:.2f}", border=True)
+        st.metric(
+            label="Receita do Mês", value=formatar_moeda(receita_mes), border=True,
+            delta=delta_receita, delta_color=cor_variacao(delta_receita), help=texto_comparacao
+        )
 
     col3, col4 = st.columns(2, gap="small")
     with col3:
-        st.metric(label="Despesas do Mês", value=f"R$ {dados['despesa_mes']:.2f}", border=True)
+        st.metric(
+            label="Despesas do Mês", value=formatar_moeda(despesa_mes), border=True,
+            delta=delta_despesa, delta_color=cor_variacao(delta_despesa, "inverse"),
+            help=texto_comparacao
+        )
     with col4:
-        st.metric(label="Economia do Mês", value=f"R$ {dados['economia_mes']:.2f}", border=True)
+        st.metric(
+            label="Economia do Mês", value=formatar_moeda(economia_mes), border=True,
+            delta=delta_economia, delta_color=cor_variacao(delta_economia), help=texto_comparacao
+        )
+
+    # ---------- Gráficos de transações ----------
+    if transacoes_dash is None:
+        st.warning("Não foi possível carregar as transações. Os gráficos não serão exibidos.")
+    elif df_dash.empty:
+        with st.container(border=True):
+            st.info("Cadastre suas primeiras transações para ver os gráficos do dashboard.")
+            st.button(
+                "Cadastrar transação", key="dash_ir_transacoes_vazio",
+                icon=":material/add:", on_click=navegar, args=("Transações",)
+            )
+    else:
+        col_meses, col_categorias = st.columns([3, 2], gap="small")
+        ALTURA_CARDS = 450
+
+        # Receitas vs. Despesas nos últimos 6 meses
+        with col_meses:
+            with st.container(border=True, height=ALTURA_CARDS):
+                st.write("**Receitas vs. Despesas — últimos 6 meses**")
+
+                linhas_meses = []
+                for ano, mes in ultimos_meses(hoje, 6):
+                    receita, despesa = totais_do_mes(df_dash, f"{ano:04d}-{mes:02d}")
+                    rotulo = f"{MESES_ABREV[mes - 1]}/{str(ano)[2:]}"
+                    for tipo, valor_tipo in (("Receita", receita), ("Despesa", despesa)):
+                        linhas_meses.append({
+                            "Mês": rotulo,
+                            "Tipo": tipo,
+                            "Valor": valor_tipo,
+                            "Valor (R$)": formatar_moeda(valor_tipo)
+                        })
+                df_meses = pd.DataFrame(linhas_meses)
+                ordem_meses = list(dict.fromkeys(df_meses["Mês"]))
+
+                grafico_meses = alt.Chart(df_meses).mark_bar(
+                    cornerRadiusTopLeft=4, cornerRadiusTopRight=4
+                ).encode(
+                    x=alt.X("Mês:N", sort=ordem_meses, title=None, axis=alt.Axis(labelAngle=0)),
+                    xOffset=alt.XOffset(
+                        "Tipo:N", sort=["Receita", "Despesa"], scale=alt.Scale(paddingInner=0.1)
+                    ),
+                    y=alt.Y("Valor:Q", axis=eixo_reais(tickCount=5)),
+                    color=alt.Color(
+                        "Tipo:N",
+                        scale=alt.Scale(domain=["Receita", "Despesa"], range=[COR_RECEITA, COR_DESPESA]),
+                        legend=alt.Legend(title=None, orient="top")
+                    ),
+                    tooltip=[
+                        alt.Tooltip("Mês:N"),
+                        alt.Tooltip("Tipo:N"),
+                        alt.Tooltip("Valor (R$):N")
+                    ]
+                ).properties(height=300)
+                st.altair_chart(grafico_meses)
+
+        # Despesas do mês atual por categoria
+        with col_categorias:
+            with st.container(border=True, height=ALTURA_CARDS):
+                st.write(f"**Despesas por categoria — {MESES_ABREV[mes_atual - 1]}/{str(ano_atual)[2:]}**")
+
+                despesas_mes = df_dash[
+                    (df_dash["tipo"] == "despesa") & (df_dash["chave_mes"] == chave_atual)
+                ]
+                if despesas_mes.empty:
+                    st.info("Nenhuma despesa registrada neste mês.")
+                else:
+                    df_categorias = (
+                        despesas_mes.groupby("categoria")["valor"].sum()
+                        .sort_values(ascending=False).reset_index()
+                    )
+                    df_categorias.columns = ["Categoria", "Valor"]
+                    total_despesas_mes = float(df_categorias["Valor"].sum())
+                    df_categorias["Valor (R$)"] = df_categorias["Valor"].apply(formatar_moeda)
+                    df_categorias["Participação"] = df_categorias["Valor"].apply(
+                        lambda v: f"{(v / total_despesas_mes) * 100:.1f}%".replace(".", ",")
+                    )
+
+                    grafico_categorias = alt.Chart(df_categorias).mark_bar(
+                        cornerRadiusEnd=4, color=COR_DESPESA, size=22
+                    ).encode(
+                        y=alt.Y("Categoria:N", sort="-x", title=None),
+                        x=alt.X("Valor:Q", axis=eixo_reais(tickCount=4)),
+                        tooltip=[
+                            alt.Tooltip("Categoria:N"),
+                            alt.Tooltip("Valor (R$):N"),
+                            alt.Tooltip("Participação:N")
+                        ]
+                    ).properties(height=260)
+                    st.altair_chart(grafico_categorias)
+
+                    maior = df_categorias.iloc[0]
+                    st.caption(
+                        f"Maior gasto: **{maior['Categoria']}** "
+                        f"({maior['Valor (R$)']} · {maior['Participação']} do mês)"
+                    )
+
+        # Evolução do saldo acumulado
+        with st.container(border=True):
+            st.write("**Evolução do saldo**")
+
+            movimentos = df_dash[df_dash["tipo"].isin(["receita", "despesa"])].copy()
+            movimentos["movimento"] = movimentos["valor"].where(
+                movimentos["tipo"] == "receita", -movimentos["valor"]
+            )
+            df_saldo = (
+                movimentos.groupby(movimentos["data"].dt.normalize())["movimento"]
+                .sum().sort_index().cumsum().reset_index()
+            )
+            df_saldo.columns = ["Data", "Saldo"]
+            df_saldo["Dia"] = df_saldo["Data"].dt.strftime("%d/%m/%Y")
+            df_saldo["Saldo (R$)"] = df_saldo["Saldo"].apply(formatar_moeda)
+
+            linha_saldo = alt.Chart(df_saldo).mark_line(
+                strokeWidth=2, color=COR_SALDO,
+                point=alt.OverlayMarkDef(size=60, filled=True, color=COR_SALDO)
+            ).encode(
+                x=alt.X("Data:T", title=None, axis=alt.Axis(format="%d/%m/%y", labelAngle=0)),
+                y=alt.Y("Saldo:Q", axis=eixo_reais()),
+                tooltip=[alt.Tooltip("Dia:N", title="Data"), alt.Tooltip("Saldo (R$):N", title="Saldo")]
+            )
+            linha_zero = alt.Chart(pd.DataFrame({"zero": [0]})).mark_rule(
+                color="gray", strokeDash=[4, 4], opacity=0.5
+            ).encode(y="zero:Q")
+
+            st.altair_chart((linha_zero + linha_saldo).properties(height=280))
+            st.caption("Saldo acumulado dia a dia, considerando todas as transações cadastradas.")
+
+    # ---------- Orçamentos e Metas ----------
+    col_orc_dash, col_meta_dash = st.columns(2, gap="small")
+
+    with col_orc_dash:
+        with st.container(border=True):
+            st.write("**Orçamentos**")
+            orcamentos_dash = buscar_orcamentos()
+
+            if not orcamentos_dash:
+                st.info("Nenhum orçamento cadastrado no banco.")
+            else:
+                estourados = 0
+                for item in orcamentos_dash:
+                    categoria_item = item.get("categoria", "Sem categoria")
+                    limite_item = float(item.get("limite") or 0.0)
+                    gasto_item = float(item.get("gasto_atual") or 0.0)
+                    uso = (gasto_item / limite_item) if limite_item > 0 else 0.0
+
+                    if uso > 1:
+                        estourados += 1
+                        situacao = " · ⛔ Limite ultrapassado"
+                    elif uso >= 0.8:
+                        situacao = " · ⚠️ Perto do limite"
+                    else:
+                        situacao = ""
+
+                    st.progress(
+                        max(0.0, min(uso, 1.0)),
+                        text=(
+                            f"**{categoria_item}** · {moeda_md(gasto_item)} de "
+                            f"{moeda_md(limite_item)} ({uso * 100:.0f}%){situacao}"
+                        )
+                    )
+
+                if estourados:
+                    st.error(f"{estourados} orçamento(s) com o limite ultrapassado.")
+
+            st.button(
+                "Gerenciar orçamentos", key="dash_ir_orcamentos", type="tertiary",
+                icon=":material/arrow_forward:", on_click=navegar, args=("Orçamentos",)
+            )
+
+    with col_meta_dash:
+        with st.container(border=True):
+            st.write("**Metas**")
+            metas_dash = buscar_metas()
+
+            if not metas_dash:
+                st.info("Nenhuma meta cadastrada.")
+            else:
+                concluidas = 0
+                for meta in metas_dash:
+                    alvo_meta = float(meta.get("valor_alvo") or 0.0)
+                    guardado_meta = float(meta.get("valor_guardado") or 0.0)
+                    progresso_meta = (guardado_meta / alvo_meta) if alvo_meta > 0 else 0.0
+
+                    if progresso_meta >= 1:
+                        concluidas += 1
+                        situacao = " · ✅ Alcançada"
+                    else:
+                        situacao = ""
+
+                    st.progress(
+                        max(0.0, min(progresso_meta, 1.0)),
+                        text=(
+                            f"**{meta.get('nome', 'Meta')}** · {moeda_md(guardado_meta)} de "
+                            f"{moeda_md(alvo_meta)} ({progresso_meta * 100:.0f}%){situacao}"
+                        )
+                    )
+
+                total_guardado = sum(float(m.get("valor_guardado") or 0.0) for m in metas_dash)
+                st.caption(
+                    f"{concluidas} de {len(metas_dash)} meta(s) alcançada(s) · "
+                    f"Total guardado: {formatar_moeda(total_guardado)}"
+                )
+
+            st.button(
+                "Gerenciar metas", key="dash_ir_metas", type="tertiary",
+                icon=":material/arrow_forward:", on_click=navegar, args=("Metas",)
+            )
+
+    # ---------- Últimas transações ----------
+    if not df_dash.empty:
+        with st.container(border=True):
+            st.write("**Últimas transações**")
+
+            colunas_tabela = [
+                c for c in ["data", "descricao", "tipo", "categoria", "valor"] if c in df_dash.columns
+            ]
+            df_ultimas = df_dash.sort_values("data", ascending=False).head(5)[colunas_tabela].copy()
+            df_ultimas["data"] = df_ultimas["data"].dt.strftime("%d/%m/%Y")
+            df_ultimas["tipo"] = df_ultimas["tipo"].str.capitalize()
+
+            st.dataframe(
+                df_ultimas,
+                hide_index=True,
+                width="stretch",
+                column_config={
+                    "data": "Data",
+                    "descricao": "Descrição",
+                    "tipo": "Tipo",
+                    "categoria": "Categoria",
+                    "valor": st.column_config.NumberColumn("Valor (R$)", format="R$ %.2f")
+                }
+            )
+            st.button(
+                "Ver todas as transações", key="dash_ir_transacoes", type="tertiary",
+                icon=":material/arrow_forward:", on_click=navegar, args=("Transações",)
+            )
 
 # -------------------------------------------- Transações ----------------------------------------------
 
 elif pagina == "Transações":
     st.subheader("Minhas Transações")
+    if "aviso_transacoes" in st.session_state:
+        st.success(st.session_state.pop("aviso_transacoes"))
 
     with st.container(border=True):
         st.write("Nova Transação")
@@ -124,7 +556,7 @@ elif pagina == "Transações":
                     "observacao": observacao_opcional
                 }
                 if criar_transacao(nova_transacao):
-                    st.success("Transação salva")
+                    st.session_state["aviso_transacoes"] = "Transação salva com sucesso!"
                     st.rerun()
                 else:
                     st.error("Erro ao conectar com o servidor")
@@ -136,10 +568,6 @@ elif pagina == "Transações":
             
             if filtro_tipo != "Todos":
                 df = df[df["tipo"] == filtro_tipo]
-            if "_id" in df.columns:
-                df = df.drop(columns=["_id", "user_id"], errors="ignore")
-            if "data" in df.columns:
-                df["data"] = pd.to_datetime(df["data"], errors="coerce").dt.strftime("%d/%m/%Y")
 
             categorias_filtro = sorted(df["categoria"].dropna().unique())
             opcoes_categoria = ["Todas"] + list(categorias_filtro)
@@ -148,8 +576,17 @@ elif pagina == "Transações":
             if filtro_categoria != "Todas":
                 df = df[df["categoria"] == filtro_categoria]
 
+            # Guarda os IDs da lista filtrada antes de esconder as colunas internas
+            ids_filtrados = list(df["_id"]) if "_id" in df.columns else []
+
+            df_exibicao = df.drop(columns=["_id", "user_id"], errors="ignore")
+            if "data" in df_exibicao.columns:
+                df_exibicao["data"] = pd.to_datetime(
+                    df_exibicao["data"], errors="coerce"
+                ).dt.strftime("%d/%m/%Y")
+
             st.dataframe(
-                df,
+                df_exibicao,
                 hide_index=True,
                 column_config={
                     "descricao": "Descrição",
@@ -162,6 +599,117 @@ elif pagina == "Transações":
                     )
                 }
             )
+        # ---------- Editar / excluir ----------
+            with st.container(border=True):
+                st.write("**Editar ou excluir uma transação**")
+
+                transacoes_por_id = {t["_id"]: t for t in transacao_salva}
+                ids_opcoes = sorted(
+                    (i for i in ids_filtrados if i in transacoes_por_id),
+                    key=lambda i: str(transacoes_por_id[i].get("data", "")),
+                    reverse=True
+                )
+
+                def descrever_transacao(transacao_id):
+                    t = transacoes_por_id[transacao_id]
+                    data_txt = pd.to_datetime(t.get("data"), errors="coerce")
+                    data_txt = data_txt.strftime("%d/%m/%Y") if not pd.isna(data_txt) else "Sem data"
+                    return (
+                        f"{data_txt} · {t.get('descricao', '')} · {t.get('tipo', '')} · "
+                        f"{formatar_moeda(float(t.get('valor', 0)))}"
+                    )
+
+                if not ids_opcoes:
+                    st.info("Nenhuma transação encontrada com os filtros selecionados.")
+                else:
+                    transacao_id = st.selectbox(
+                        "Selecione a transação", ids_opcoes,
+                        format_func=descrever_transacao, key="transacao_selecionada"
+                    )
+                    transacao = transacoes_por_id[transacao_id]
+
+                    try:
+                        data_atual = date.fromisoformat(str(transacao.get("data", ""))[:10])
+                    except ValueError:
+                        data_atual = date.today()
+
+                    col_editar_tr, col_excluir_tr = st.columns(2)
+
+                    with col_editar_tr:
+                        with st.popover("Editar"):
+                            st.write("**Editar esta transação**")
+
+                            tipo_atual = transacao.get("tipo", "Despesa")
+                            tipo_editado = st.selectbox(
+                                "Tipo", ["Receita", "Despesa"],
+                                index=0 if tipo_atual == "Receita" else 1,
+                                key=f"tipo_edit_{transacao_id}"
+                            )
+                            categorias_edicao = (
+                                categorias_receita if tipo_editado == "Receita" else categorias_despesa
+                            )
+                            categoria_atual = transacao.get("categoria")
+
+                            with st.form(f"editar_transacao_{transacao_id}"):
+                                descricao_editada = st.text_input(
+                                    "Descrição", value=transacao.get("descricao", ""),
+                                    key=f"desc_edit_{transacao_id}"
+                                )
+                                valor_editado = st.number_input(
+                                    "Valor (R$)", min_value=0.01,
+                                    value=max(float(transacao.get("valor", 0.01)), 0.01),
+                                    step=0.01, format="%.2f", key=f"valor_edit_{transacao_id}"
+                                )
+                                categoria_editada = st.selectbox(
+                                    "Categoria", categorias_edicao,
+                                    index=(
+                                        categorias_edicao.index(categoria_atual)
+                                        if categoria_atual in categorias_edicao else 0
+                                    ),
+                                    key=f"cat_edit_{transacao_id}_{tipo_editado}"
+                                )
+                                data_editada = st.date_input(
+                                    "Data", value=data_atual, format="DD/MM/YYYY",
+                                    key=f"data_edit_{transacao_id}"
+                                )
+                                observacao_editada = st.text_area(
+                                    "Observação (opcional)", value=transacao.get("observacao") or "",
+                                    key=f"obs_edit_{transacao_id}"
+                                )
+                                salvar_transacao = st.form_submit_button("Salvar alterações")
+
+                            if salvar_transacao:
+                                if not descricao_editada.strip():
+                                    st.error("Digite uma descrição para a transação.")
+                                else:
+                                    payload_transacao = {
+                                        "descricao": descricao_editada.strip(),
+                                        "valor": float(valor_editado),
+                                        "tipo": tipo_editado,
+                                        "categoria": categoria_editada,
+                                        "data": data_editada.isoformat(),
+                                        "observacao": observacao_editada.strip()
+                                    }
+                                    if editar_transacao(transacao_id, payload_transacao):
+                                        st.session_state["aviso_transacoes"] = "Transação atualizada com sucesso!"
+                                        st.rerun()
+                                    else:
+                                        st.error("Erro ao editar a transação.")
+
+                    with col_excluir_tr:
+                        with st.popover("Excluir"):
+                            st.write(
+                                f"Deseja realmente excluir a transação "
+                                f"**{transacao.get('descricao', '')}**?"
+                            )
+                            st.caption("Essa ação não pode ser desfeita.")
+                            if st.button("Confirmar exclusão", key=f"excluir_transacao_{transacao_id}"):
+                                if excluir_transacao(transacao_id):
+                                    st.session_state.pop("transacao_selecionada", None)
+                                    st.session_state["aviso_transacoes"] = "Transação excluída com sucesso."
+                                    st.rerun()
+                                else:
+                                    st.error("Erro ao excluir a transação.")
         else:
             st.info("Nenhuma Transação Cadastrada")
 
@@ -170,6 +718,8 @@ elif pagina == "Transações":
 elif pagina == "Orçamentos":
     st.subheader("Controle de Orçamentos")
     st.write("Defina seus limites financeiros e acompanhe o consumo por categoria.")
+    if "aviso_orcamentos" in st.session_state:
+        st.success(st.session_state.pop("aviso_orcamentos"))
 
     def formatar_reais(numero):
         return "R$ " + f"{numero:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
@@ -198,7 +748,7 @@ elif pagina == "Orçamentos":
             if salvar_api:
                 novo_orcamento_api = {"categoria": categoria_api, "limite": float(limite_api)}
                 if criar_orcamento(novo_orcamento_api):
-                    st.success(f"Orçamento para {categoria_api} salvo com sucesso!")
+                    st.session_state["aviso_orcamentos"] = f"Orçamento para {categoria_api} salvo com sucesso!"
                     st.rerun()
                 else:
                     st.error("Não foi possível salvar o orçamento no servidor.")
@@ -233,8 +783,16 @@ elif pagina == "Orçamentos":
                                 st.warning("Atenção: você está perto do limite (80% ou mais).")
                             else:
                                 st.success("Gastos dentro do limite.")
+                            with st.popover("Excluir orçamento"):
+                                st.write(f"Deseja realmente excluir o orçamento de **{categoria_item}**?")
+                                if st.button("Confirmar exclusão", key=f"excluir_orc_api_{item.get('_id')}"):
+                                    if excluir_orcamento(item.get("_id")):
+                                        st.session_state["aviso_orcamentos"] = f"Orçamento de {categoria_item} excluído."
+                                        st.rerun()
+                                    else:
+                                        st.error("Erro ao excluir o orçamento.")
             else:
-                st.info("Nenhum orçamento encontrado no banco ou a API está indisponível.")
+                st.info("Nenhum orçamento encontrado.")
 
     with tab_mensal:
         st.caption("Esta seção mantém orçamentos mensais por mês/ano na sessão atual.")
@@ -413,7 +971,7 @@ elif pagina == "Metas":
                 "Prazo para alcançar a meta", value=None,
                 min_value=date.today(), format="DD/MM/YYYY"
             )
-            salvar_meta = st.form_submit_button("Salvar Meta", use_container_width=True)
+            salvar_meta = st.form_submit_button("Salvar Meta", width="stretch")
 
         if salvar_meta:
             metas_existentes = buscar_metas()
@@ -590,9 +1148,9 @@ elif pagina == "Relatórios":
         if relatorio:
             resumo = relatorio["resumo"]
             col1, col2, col3 = st.columns(3)
-            col1.metric("Receitas no Período", f"R$ {resumo['total_receitas']:.2f}", border=True)
-            col2.metric("Despesas no Período", f"R$ {resumo['total_despesas']:.2f}", border=True)
-            col3.metric("Saldo do Período", f"R$ {resumo['saldo_periodo']:.2f}", border=True)
+            col1.metric("Receitas no Período", formatar_moeda(resumo["total_receitas"]), border=True)
+            col2.metric("Despesas no Período", formatar_moeda(resumo["total_despesas"]), border=True)
+            col3.metric("Saldo do Período", formatar_moeda(resumo["saldo_periodo"]), border=True)
 
             with st.container(border=True):
                 st.write("**Receitas vs. Despesas no Período**")

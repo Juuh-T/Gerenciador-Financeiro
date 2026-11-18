@@ -161,9 +161,7 @@ def mostrar_login():
                         st.rerun()
 
             with st.container(key="auth_acoes_login"):
-                if st.button("Esqueceu sua senha?", type="tertiary", width="stretch"):
-                    st.info("A recuperação de senha será adicionada quando o backend estiver pronto.")
-
+                
                 st.markdown(
                     '<div class="auth-divisoria">Ainda não tem uma conta?</div>',
                     unsafe_allow_html=True,

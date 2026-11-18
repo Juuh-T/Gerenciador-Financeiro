@@ -1,8 +1,11 @@
-
 # CONFIGURAÇÕES GERAIS
 [theme]
 metricValueFontSize = "24px"
 showSidebarBorder = true
+showWidgetBorder = true                 # novo
+baseRadius = "12px"                     # novo
+buttonRadius = "10px"                   # novo
+font = "'Inter':https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"  # novo
 
 # TEMA CLARO
 [theme.light]
@@ -39,3 +42,7 @@ backgroundColor = "#111D30"
 secondaryBackgroundColor = "#172338"
 textColor = "#E2E8F0"
 borderColor = "#2B3B55"
+
+# MENU DO STREAMLIT (esconde o botão Deploy)  # novo
+[client]                                      # novo
+toolbarMode = "minimal"                       # novo

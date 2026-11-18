@@ -67,6 +67,31 @@ def criar_transacao(payload):
     except Exception:
         return False
 
+def editar_transacao(transacao_id, payload):
+    try:
+        response = requests.put(
+            f"{API_URL}/transactions/{transacao_id}",
+            json=payload,
+            headers=_headers_usuario(),
+            timeout=5
+        )
+        return response.status_code == 200
+    except Exception as e:
+        print(f"Erro ao editar transação: {e}")
+        return False
+
+def excluir_transacao(transacao_id):
+    try:
+        response = requests.delete(
+            f"{API_URL}/transactions/{transacao_id}",
+            headers=_headers_usuario(),
+            timeout=5
+        )
+        return response.status_code == 200
+    except Exception as e:
+        print(f"Erro ao excluir transação: {e}")
+        return False
+
 def criar_orcamento(payload):
     try:
         response = requests.post(
@@ -77,6 +102,18 @@ def criar_orcamento(payload):
         )
         return response.status_code in [200, 201]
     except Exception:
+        return False
+
+def excluir_orcamento(orcamento_id):
+    try:
+        response = requests.delete(
+            f"{API_URL}/budgets/{orcamento_id}",
+            headers=_headers_usuario(),
+            timeout=5
+        )
+        return response.status_code == 200
+    except Exception as e:
+        print(f"Erro ao excluir orçamento: {e}")
         return False
 
 # ---- Funções de METAS ----

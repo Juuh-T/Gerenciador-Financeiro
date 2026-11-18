@@ -90,6 +90,30 @@ def list_transactions(user_id: str):
         item["_id"] = str(item["_id"])
     return transactions
 
+def _converter_id(item_id: str) -> ObjectId:
+    if not ObjectId.is_valid(item_id):
+        raise HTTPException(status_code=404, detail="Registro não encontrado")
+    return ObjectId(item_id)
+
+def update_transaction(transaction_id: str, data: TransactionSchema, user_id: str):
+    uid = _validar_user_id(user_id)
+    transaction_dict = data.model_dump()
+    transaction_dict["user_id"] = uid
+    result = collection.update_one(
+        {"_id": _converter_id(transaction_id), "user_id": uid},
+        {"$set": transaction_dict}
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Transação não encontrada")
+    return True
+
+def delete_transaction(transaction_id: str, user_id: str):
+    uid = _validar_user_id(user_id)
+    result = collection.delete_one({"_id": _converter_id(transaction_id), "user_id": uid})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Transação não encontrada")
+    return True
+
 def get_dashboard_summary(user_id: str):
     uid = _validar_user_id(user_id)
     transactions = list(collection.find({"user_id": uid}))
@@ -142,6 +166,13 @@ def list_budgets_with_progress(user_id: str):
         })
 
     return resultado
+
+def delete_budget(budget_id: str, user_id: str):
+    uid = _validar_user_id(user_id)
+    result = budgets_collection.delete_one({"_id": _converter_id(budget_id), "user_id": uid})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Orçamento não encontrado")
+    return True
 
 # ------ Lógica de Metas ------
 
