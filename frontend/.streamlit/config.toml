@@ -45,4 +45,4 @@ borderColor = "#2B3B55"
 
 # MENU DO STREAMLIT (esconde o botão Deploy)  # novo
 [client]                                      # novo
-toolbarMode = "minimal"                       # novo
+toolbarMode = "viewer"                        # novo
