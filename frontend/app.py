@@ -143,7 +143,7 @@ if "pagina_atual" not in st.session_state:
 st.markdown(
     """
     <style>
-      .block-container { padding-top: 2.2rem; }
+      .block-container { padding-top: 4rem; }
 
       /* Cabeçalho no mesmo estilo da tela de login */
       .gf-topo { display: flex; align-items: center; gap: 14px; margin-bottom: 1.4rem; }
